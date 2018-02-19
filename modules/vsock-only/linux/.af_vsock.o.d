@@ -1,32 +1,33 @@
-af_vsock.o: /media/disk/pub/VMware/14/source/vsock-only/linux/af_vsock.c \
+af_vsock.o: \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/af_vsock.c \
  include/linux/kconfig.h include/generated/autoconf.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/driver-config.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/includeCheck.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_version.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/driver-config.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/includeCheck.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_version.h \
  include/generated/uapi/linux/version.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_autoconf.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_autoconf.h \
  include/linux/types.h include/uapi/linux/types.h \
  arch/x86/include/uapi/asm/types.h include/uapi/asm-generic/types.h \
  include/asm-generic/int-ll64.h include/uapi/asm-generic/int-ll64.h \
  arch/x86/include/uapi/asm/bitsperlong.h \
  include/asm-generic/bitsperlong.h include/uapi/asm-generic/bitsperlong.h \
  include/uapi/linux/posix_types.h include/linux/stddef.h \
- include/uapi/linux/stddef.h include/linux/compiler.h \
+ include/uapi/linux/stddef.h include/linux/compiler_types.h \
  include/linux/compiler-gcc.h arch/x86/include/asm/posix_types.h \
  arch/x86/include/uapi/asm/posix_types_64.h \
  include/uapi/asm-generic/posix_types.h include/linux/kmod.h \
  include/linux/umh.h include/linux/gfp.h include/linux/mmdebug.h \
  include/linux/bug.h arch/x86/include/asm/bug.h include/linux/stringify.h \
- include/asm-generic/bug.h include/linux/kernel.h \
+ include/asm-generic/bug.h include/linux/compiler.h \
+ arch/x86/include/asm/barrier.h arch/x86/include/asm/alternative.h \
+ arch/x86/include/asm/asm.h arch/x86/include/asm/nops.h \
+ include/asm-generic/barrier.h include/linux/kernel.h \
  /usr/lib/gcc/x86_64-linux-gnu/4.9/include/stdarg.h \
  include/linux/linkage.h include/linux/export.h \
  arch/x86/include/asm/linkage.h include/linux/bitops.h \
- arch/x86/include/asm/bitops.h arch/x86/include/asm/alternative.h \
- arch/x86/include/asm/asm.h arch/x86/include/asm/rmwcc.h \
- arch/x86/include/asm/barrier.h arch/x86/include/asm/nops.h \
- include/asm-generic/barrier.h include/asm-generic/bitops/find.h \
- include/asm-generic/bitops/sched.h arch/x86/include/asm/arch_hweight.h \
- arch/x86/include/asm/cpufeatures.h \
+ arch/x86/include/asm/bitops.h arch/x86/include/asm/rmwcc.h \
+ include/asm-generic/bitops/find.h include/asm-generic/bitops/sched.h \
+ arch/x86/include/asm/arch_hweight.h arch/x86/include/asm/cpufeatures.h \
  arch/x86/include/asm/required-features.h \
  arch/x86/include/asm/disabled-features.h \
  include/asm-generic/bitops/const_hweight.h \
@@ -105,11 +106,12 @@ af_vsock.o: /media/disk/pub/VMware/14/source/vsock-only/linux/af_vsock.c \
  include/linux/rcupdate.h include/linux/rcutree.h \
  include/linux/workqueue.h include/linux/timer.h include/linux/ktime.h \
  include/linux/time.h include/linux/time64.h include/uapi/linux/time.h \
- include/linux/jiffies.h include/linux/timex.h include/uapi/linux/timex.h \
- include/uapi/linux/param.h arch/x86/include/uapi/asm/param.h \
- include/asm-generic/param.h include/uapi/asm-generic/param.h \
- arch/x86/include/asm/timex.h arch/x86/include/asm/tsc.h \
- include/generated/timeconst.h include/linux/timekeeping.h \
+ include/linux/time32.h include/linux/jiffies.h include/linux/timex.h \
+ include/uapi/linux/timex.h include/uapi/linux/param.h \
+ arch/x86/include/uapi/asm/param.h include/asm-generic/param.h \
+ include/uapi/asm-generic/param.h arch/x86/include/asm/timex.h \
+ arch/x86/include/asm/tsc.h include/generated/timeconst.h \
+ include/linux/timekeeping.h include/linux/timekeeping32.h \
  include/linux/debugobjects.h include/linux/rcu_segcblist.h \
  include/linux/srcutree.h include/linux/rcu_node_tree.h \
  include/linux/completion.h arch/x86/include/asm/mmzone.h \
@@ -138,19 +140,19 @@ af_vsock.o: /media/disk/pub/VMware/14/source/vsock-only/linux/af_vsock.c \
  include/linux/irqnr.h include/uapi/linux/irqnr.h \
  arch/x86/include/asm/archrandom.h include/linux/fcntl.h \
  include/uapi/linux/fcntl.h arch/x86/include/uapi/asm/fcntl.h \
- include/uapi/asm-generic/fcntl.h include/linux/kmemcheck.h \
- include/linux/mm_types.h include/linux/mm_types_task.h \
- arch/x86/include/asm/tlbbatch.h include/linux/auxvec.h \
- include/uapi/linux/auxvec.h arch/x86/include/uapi/asm/auxvec.h \
- include/linux/uprobes.h include/linux/fs.h include/linux/wait_bit.h \
- include/linux/kdev_t.h include/uapi/linux/kdev_t.h \
- include/linux/dcache.h include/linux/rculist.h \
- include/linux/rculist_bl.h include/linux/list_bl.h \
- include/linux/bit_spinlock.h include/linux/lockref.h \
- include/linux/stringhash.h include/linux/hash.h include/linux/path.h \
- include/linux/stat.h arch/x86/include/uapi/asm/stat.h \
- include/uapi/linux/stat.h include/linux/list_lru.h \
- include/linux/shrinker.h include/linux/radix-tree.h include/linux/pid.h \
+ include/uapi/asm-generic/fcntl.h include/linux/fs.h \
+ include/linux/wait_bit.h include/linux/kdev_t.h \
+ include/uapi/linux/kdev_t.h include/linux/dcache.h \
+ include/linux/rculist.h include/linux/rculist_bl.h \
+ include/linux/list_bl.h include/linux/bit_spinlock.h \
+ include/linux/lockref.h include/linux/stringhash.h include/linux/hash.h \
+ include/linux/path.h include/linux/stat.h \
+ arch/x86/include/uapi/asm/stat.h include/uapi/linux/stat.h \
+ include/linux/list_lru.h include/linux/shrinker.h \
+ include/linux/radix-tree.h include/linux/pid.h include/linux/mm_types.h \
+ include/linux/mm_types_task.h arch/x86/include/asm/tlbbatch.h \
+ include/linux/auxvec.h include/uapi/linux/auxvec.h \
+ arch/x86/include/uapi/asm/auxvec.h include/linux/uprobes.h \
  include/linux/capability.h include/uapi/linux/capability.h \
  include/linux/semaphore.h include/uapi/linux/fiemap.h \
  include/linux/migrate_mode.h include/linux/percpu-rwsem.h \
@@ -225,16 +227,16 @@ af_vsock.o: /media/disk/pub/VMware/14/source/vsock-only/linux/af_vsock.c \
  arch/x86/include/uapi/asm/poll.h include/uapi/asm-generic/poll.h \
  include/linux/sched/signal.h include/linux/signal.h \
  include/linux/sched/jobctl.h include/linux/sched/task.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_cred.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_module.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_cred.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_module.h \
  include/linux/module.h include/linux/elf.h arch/x86/include/asm/elf.h \
  arch/x86/include/asm/user.h arch/x86/include/asm/user_64.h \
  arch/x86/include/asm/vdso.h include/uapi/linux/elf.h \
  include/uapi/linux/elf-em.h include/linux/moduleparam.h \
  include/linux/rbtree_latch.h arch/x86/include/asm/module.h \
  include/asm-generic/module.h arch/x86/include/asm/orc_types.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_kernel.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_sock.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_kernel.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_sock.h \
  include/net/sock.h include/linux/hardirq.h include/linux/ftrace_irq.h \
  include/linux/vtime.h include/linux/context_tracking_state.h \
  arch/x86/include/asm/hardirq.h include/linux/irq.h \
@@ -265,7 +267,8 @@ af_vsock.o: /media/disk/pub/VMware/14/source/vsock-only/linux/af_vsock.c \
  include/linux/seq_file_net.h include/net/netprio_cgroup.h \
  include/linux/cgroup.h include/uapi/linux/cgroupstats.h \
  include/uapi/linux/taskstats.h include/linux/nsproxy.h \
- include/linux/user_namespace.h include/linux/cgroup-defs.h \
+ include/linux/user_namespace.h include/linux/kernel_stat.h \
+ include/linux/interrupt.h include/linux/cgroup-defs.h \
  include/linux/bpf-cgroup.h include/uapi/linux/bpf.h \
  include/uapi/linux/bpf_common.h include/linux/cgroup_subsys.h \
  include/uapi/linux/neighbour.h include/linux/netlink.h include/net/scm.h \
@@ -282,7 +285,8 @@ af_vsock.o: /media/disk/pub/VMware/14/source/vsock-only/linux/af_vsock.c \
  include/linux/highmem.h arch/x86/include/asm/cacheflush.h \
  include/asm-generic/cacheflush.h arch/x86/include/asm/kmap_types.h \
  include/asm-generic/kmap_types.h include/linux/mempool.h \
- include/linux/ioprio.h include/linux/iocontext.h include/linux/filter.h \
+ include/linux/ioprio.h include/linux/sched/rt.h \
+ include/linux/iocontext.h include/linux/filter.h \
  include/linux/cryptohash.h include/linux/set_memory.h \
  arch/x86/include/asm/set_memory.h include/asm-generic/set_memory.h \
  include/net/sch_generic.h include/uapi/linux/pkt_cls.h \
@@ -293,42 +297,42 @@ af_vsock.o: /media/disk/pub/VMware/14/source/vsock-only/linux/af_vsock.c \
  include/linux/rculist_nulls.h include/net/dst.h include/net/neighbour.h \
  include/net/tcp_states.h include/uapi/linux/net_tstamp.h \
  include/net/smc.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_version.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_workqueue.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_mutex.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vmware.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vm_basic_types.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vm_basic_defs.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vm_assert.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vsockCommon.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_page.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vm_basic_asm.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vm_basic_asm_x86_common.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vm_basic_asm_x86_64.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vmci_defs.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vm_atomic.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vmci_call_defs.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vmci_defs.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vmci_infrastructure.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vmware.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vmci_sockets_int.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vmci_sockets.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vsockAddr.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vsockSocketWrapper.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vsockPacket.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vmci_sockets_packet.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vsockVmci.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vmci_iocontrols.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/af_vsock.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vmciKernelAPI.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/includeCheck.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vmciKernelAPI1.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vmciKernelAPI2.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/notify.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/stats.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vm_basic_math.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/vm_basic_asm.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/util.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/compat_spinlock.h \
- /media/disk/pub/VMware/14/source/vsock-only/linux/vsock_version.h \
- /media/disk/pub/VMware/14/source/vsock-only/./shared/driverLog.h
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_version.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_workqueue.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_mutex.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vmware.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vm_basic_types.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vm_basic_defs.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vm_assert.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vsockCommon.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_page.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vm_basic_asm.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vm_basic_asm_x86_common.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vm_basic_asm_x86_64.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vmci_defs.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vm_atomic.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vmci_call_defs.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vmci_defs.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vmci_infrastructure.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vmware.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vmci_sockets_int.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vmci_sockets.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vsockAddr.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vsockSocketWrapper.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vsockPacket.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vmci_sockets_packet.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vsockVmci.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vmci_iocontrols.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/af_vsock.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vmciKernelAPI.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/includeCheck.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vmciKernelAPI1.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vmciKernelAPI2.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/notify.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/stats.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vm_basic_math.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/vm_basic_asm.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/util.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/compat_spinlock.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/linux/vsock_version.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vsock-only/./shared/driverLog.h

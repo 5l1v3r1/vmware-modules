@@ -1,36 +1,36 @@
-vmciDriver.o: \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciDriver.c \
+vmciContext.o: \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/common/vmciContext.c \
  include/linux/kconfig.h include/generated/autoconf.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmci_kernel_if.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/driver-config.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/includeCheck.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/compat_version.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmci_kernel_if.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/driver-config.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/includeCheck.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/compat_version.h \
  include/generated/uapi/linux/version.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/compat_autoconf.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/compat_autoconf.h \
  include/linux/types.h include/uapi/linux/types.h \
  arch/x86/include/uapi/asm/types.h include/uapi/asm-generic/types.h \
  include/asm-generic/int-ll64.h include/uapi/asm-generic/int-ll64.h \
  arch/x86/include/uapi/asm/bitsperlong.h \
  include/asm-generic/bitsperlong.h include/uapi/asm-generic/bitsperlong.h \
  include/uapi/linux/posix_types.h include/linux/stddef.h \
- include/uapi/linux/stddef.h include/linux/compiler.h \
+ include/uapi/linux/stddef.h include/linux/compiler_types.h \
  include/linux/compiler-gcc.h arch/x86/include/asm/posix_types.h \
  arch/x86/include/uapi/asm/posix_types_64.h \
  include/uapi/asm-generic/posix_types.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/compat_cred.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/compat_cred.h \
  include/linux/cred.h include/linux/capability.h \
- include/uapi/linux/capability.h include/linux/init.h include/linux/key.h \
- include/linux/list.h include/linux/poison.h include/uapi/linux/const.h \
- include/linux/kernel.h \
+ include/uapi/linux/capability.h include/linux/init.h \
+ include/linux/compiler.h arch/x86/include/asm/barrier.h \
+ arch/x86/include/asm/alternative.h include/linux/stringify.h \
+ arch/x86/include/asm/asm.h arch/x86/include/asm/nops.h \
+ include/asm-generic/barrier.h include/linux/key.h include/linux/list.h \
+ include/linux/poison.h include/uapi/linux/const.h include/linux/kernel.h \
  /usr/lib/gcc/x86_64-linux-gnu/4.9/include/stdarg.h \
- include/linux/linkage.h include/linux/stringify.h include/linux/export.h \
+ include/linux/linkage.h include/linux/export.h \
  arch/x86/include/asm/linkage.h include/linux/bitops.h \
- arch/x86/include/asm/bitops.h arch/x86/include/asm/alternative.h \
- arch/x86/include/asm/asm.h arch/x86/include/asm/rmwcc.h \
- arch/x86/include/asm/barrier.h arch/x86/include/asm/nops.h \
- include/asm-generic/barrier.h include/asm-generic/bitops/find.h \
- include/asm-generic/bitops/sched.h arch/x86/include/asm/arch_hweight.h \
- arch/x86/include/asm/cpufeatures.h \
+ arch/x86/include/asm/bitops.h arch/x86/include/asm/rmwcc.h \
+ include/asm-generic/bitops/find.h include/asm-generic/bitops/sched.h \
+ arch/x86/include/asm/arch_hweight.h arch/x86/include/asm/cpufeatures.h \
  arch/x86/include/asm/required-features.h \
  arch/x86/include/asm/disabled-features.h \
  include/asm-generic/bitops/const_hweight.h \
@@ -104,20 +104,20 @@ vmciDriver.o: \
  include/uapi/linux/sysctl.h include/linux/rwsem.h \
  include/linux/osq_lock.h arch/x86/include/asm/rwsem.h \
  include/linux/assoc_array.h include/linux/refcount.h \
- include/linux/mutex.h include/linux/debug_locks.h \
- include/linux/selinux.h include/linux/sched.h include/uapi/linux/sched.h \
- include/linux/pid.h include/linux/rculist.h include/linux/sem.h \
- include/linux/time64.h include/uapi/linux/time.h \
- include/uapi/linux/sem.h include/linux/ipc.h include/linux/rhashtable.h \
- include/linux/jhash.h include/linux/unaligned/packed_struct.h \
- include/linux/list_nulls.h include/linux/workqueue.h \
- include/linux/timer.h include/linux/ktime.h include/linux/time.h \
- include/linux/seqlock.h include/linux/jiffies.h include/linux/timex.h \
- include/uapi/linux/timex.h include/uapi/linux/param.h \
- arch/x86/include/uapi/asm/param.h include/asm-generic/param.h \
- include/uapi/asm-generic/param.h arch/x86/include/asm/timex.h \
- arch/x86/include/asm/tsc.h include/generated/timeconst.h \
- include/linux/timekeeping.h include/linux/debugobjects.h \
+ include/linux/mutex.h include/linux/debug_locks.h include/linux/time64.h \
+ include/uapi/linux/time.h include/linux/selinux.h include/linux/sched.h \
+ include/uapi/linux/sched.h include/linux/pid.h include/linux/rculist.h \
+ include/linux/sem.h include/uapi/linux/sem.h include/linux/ipc.h \
+ include/linux/rhashtable.h include/linux/jhash.h \
+ include/linux/unaligned/packed_struct.h include/linux/list_nulls.h \
+ include/linux/workqueue.h include/linux/timer.h include/linux/ktime.h \
+ include/linux/time.h include/linux/seqlock.h include/linux/time32.h \
+ include/linux/jiffies.h include/linux/timex.h include/uapi/linux/timex.h \
+ include/uapi/linux/param.h arch/x86/include/uapi/asm/param.h \
+ include/asm-generic/param.h include/uapi/asm-generic/param.h \
+ arch/x86/include/asm/timex.h arch/x86/include/asm/tsc.h \
+ include/generated/timeconst.h include/linux/timekeeping.h \
+ include/linux/timekeeping32.h include/linux/debugobjects.h \
  include/uapi/linux/ipc.h arch/x86/include/uapi/asm/ipcbuf.h \
  include/uapi/asm-generic/ipcbuf.h arch/x86/include/uapi/asm/sembuf.h \
  include/linux/shm.h include/uapi/linux/shm.h \
@@ -157,7 +157,7 @@ vmciDriver.o: \
  arch/x86/include/uapi/asm/siginfo.h include/uapi/asm-generic/siginfo.h \
  include/linux/mm_types_task.h arch/x86/include/asm/tlbbatch.h \
  include/linux/task_io_accounting.h include/linux/sched/user.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/compat_module.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/compat_module.h \
  include/linux/module.h include/linux/stat.h \
  arch/x86/include/uapi/asm/stat.h include/uapi/linux/stat.h \
  include/linux/kmod.h include/linux/umh.h include/linux/gfp.h \
@@ -180,36 +180,34 @@ vmciDriver.o: \
  include/linux/moduleparam.h include/linux/rbtree_latch.h \
  arch/x86/include/asm/module.h include/asm-generic/module.h \
  arch/x86/include/asm/orc_types.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/compat_semaphore.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/compat_semaphore.h \
  include/linux/semaphore.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/compat_spinlock.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vm_basic_types.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmci_defs.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vm_basic_defs.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vm_atomic.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vm_assert.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/dbllnklst.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vm_assert.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmci_defs.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmci_infrastructure.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmware.h \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciCommonInt.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/includeCheck.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vm_atomic.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmci_call_defs.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmci_handle_array.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmci_kernel_if.h \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciContext.h \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciDatagram.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmci_iocontrols.h \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciDoorbell.h \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciDriver.h \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciEvent.h \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciHashtable.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmciKernelAPI.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmciKernelAPI1.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmci_call_defs.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmciKernelAPI2.h \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciQueuePair.h \
- /media/disk/pub/VMware/14/source/vmci-only/./shared/vmciQueue.h \
- /media/disk/pub/VMware/14/source/vmci-only/common/vmciResource.h
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/compat_spinlock.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vm_basic_types.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmci_defs.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vm_basic_defs.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vm_atomic.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vm_assert.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/dbllnklst.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vm_assert.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmci_defs.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmci_infrastructure.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmware.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/common/vmciCommonInt.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/includeCheck.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vm_atomic.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmci_call_defs.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmci_handle_array.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmci_kernel_if.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/common/vmciContext.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/common/vmciDatagram.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmci_iocontrols.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/common/vmciDoorbell.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/common/vmciDriver.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/common/vmciEvent.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmciKernelAPI.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmciKernelAPI1.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmci_call_defs.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmciKernelAPI2.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/common/vmciQueuePair.h \
+ /media/kernel/vmware/14.0.0.build-6661328-kernel-4.14/vmci-only/./shared/vmciQueue.h

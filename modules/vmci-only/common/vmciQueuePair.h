@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2007 VMware, Inc. All rights reserved.
+ * Copyright (C) 2007,2016,2017 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -100,6 +100,7 @@ int VMCIQPBroker_Map(VMCIHandle  handle, VMCIContext *context, VMCIQPGuestMem gu
 int VMCIQPBroker_Unmap(VMCIHandle  handle, VMCIContext *context, VMCIGuestMemID gid);
 #ifdef VMKERNEL
 int VMCIQPBroker_Revalidate(VMCIHandle  handle, VMCIContext *context);
+int VMCIQueuePair_GetDetachCause(VMCIHandle handle, uint8 *cause);
 #endif
 
 #endif /* !_VMCI_QUEUE_PAIR_H_ */

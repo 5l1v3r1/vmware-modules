@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2011-2014,2017 VMware, Inc. All rights reserved.
+ * Copyright (C) 2011-2019 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,6 +26,7 @@
 
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/vmalloc.h>
 #include <linux/init.h>
 #if defined(__x86_64__) && LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 12)
 #   include <linux/ioctl32.h>
@@ -185,6 +186,7 @@ static uint32 data_buffer_size = VMCI_MAX_DG_SIZE;
 static uint8 *notification_bitmap;
 static dma_addr_t notification_base;
 
+static Bool usePPN64;
 
 /*
  *----------------------------------------------------------------------
@@ -381,6 +383,28 @@ unregister_ioctl32_handlers(void)
 #define register_ioctl32_handlers() (0)
 #define unregister_ioctl32_handlers() do { } while (0)
 #endif /* VM_X86_64 */
+
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * VMCI_UsePPN64Cap --
+ *
+ *      Query if device is using 64 bit PPN
+ *
+ * Results:
+ *      TRUE if 64 bit PPN is enabled, otherwise FALSE
+ *
+ * Side effects:
+ *      None.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+Bool VMCI_UsePPN64Cap()
+{
+   return usePPN64;
+}
 
 
 /*
@@ -627,11 +651,10 @@ VMCIDoQPBrokerAlloc(VMCIHandle handle,
                     Bool vmToVm,
                     void *resultUVA)
 {
-   VMCIId cid;
    int result;
    int retval;
 
-   cid = VMCIContext_GetId(context);
+   VMCIContext_GetId(context);
 
    result = VMCIQPBroker_Alloc(handle, peer, flags, VMCI_NO_PRIVILEGE_FLAGS,
                                produceSize, consumeSize, pageStore, context);
@@ -1437,7 +1460,7 @@ static INLINE Bool
 VMCIUserVAInvalidPointer(VA uva,      // IN:
                          size_t size) // IN:
 {
-   return !access_ok(VERIFY_WRITE, (void *)uva, size);
+   return !access_ok((void *)uva, size);
 }
 
 
@@ -1459,7 +1482,6 @@ VMCIUserVAInvalidPointer(VA uva,      // IN:
  *-----------------------------------------------------------------------------
  */
 
-#define ONE_PAGE 1
 static INLINE struct page *
 VMCIUserVALockPage(VA addr) // IN:
 {
@@ -1467,12 +1489,19 @@ VMCIUserVALockPage(VA addr) // IN:
    int retval;
 
    down_read(&current->mm->mmap_sem);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 6, 0)
-   retval = get_user_pages(addr, ONE_PAGE, FOLL_WRITE, &page, NULL);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 99)
+   retval = get_user_pages(addr,
 #else
    retval = get_user_pages(current, current->mm, addr,
-                           1, 1, 0, &page, NULL);
 #endif
+                           1,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+                           1, 0,
+#else
+                           FOLL_WRITE,
+#endif
+                           &page, NULL);
+
    up_read(&current->mm->mmap_sem);
 
    if (retval != 1) {
@@ -1687,7 +1716,11 @@ vmci_guest_init(void)
    /* This should be last to make sure we are done initializing. */
    retval = pci_register_driver(&vmci_driver);
    if (retval < 0) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 15, 0)
       vfree(data_buffer);
+#else
+      kvfree(data_buffer);
+#endif
       data_buffer = NULL;
       return retval;
    }
@@ -1756,6 +1789,7 @@ vmci_probe_device(struct pci_dev *pdev,           // IN: vmci PCI device
    unsigned int ioaddr;
    unsigned int ioaddr_size;
    unsigned int capabilities;
+   unsigned int caps_in_use;
    int result;
 
    printk(KERN_INFO "Probing for vmci/PCI.\n");
@@ -1803,8 +1837,9 @@ vmci_probe_device(struct pci_dev *pdev,           // IN: vmci PCI device
     * If the hardware supports notifications, we will use that as
     * well.
     */
-   if (capabilities & VMCI_CAPS_NOTIFICATIONS) {
-      capabilities = VMCI_CAPS_DATAGRAM;
+
+   caps_in_use = VMCI_CAPS_DATAGRAM;
+   if ((capabilities & VMCI_CAPS_NOTIFICATIONS) != 0) {
       notification_bitmap = dma_alloc_coherent(&pdev->dev, PAGE_SIZE,
                                                &notification_base,
                                                GFP_KERNEL);
@@ -1812,15 +1847,19 @@ vmci_probe_device(struct pci_dev *pdev,           // IN: vmci PCI device
          printk(KERN_ERR "VMCI device unable to allocate notification bitmap.\n");
       } else {
          memset(notification_bitmap, 0, PAGE_SIZE);
-         capabilities |= VMCI_CAPS_NOTIFICATIONS;
+         caps_in_use |= VMCI_CAPS_NOTIFICATIONS;
       }
-   } else {
-      capabilities = VMCI_CAPS_DATAGRAM;
    }
-   printk(KERN_INFO "VMCI: using capabilities 0x%x.\n", capabilities);
+
+   if ((capabilities & VMCI_CAPS_PPN64) != 0) {
+      usePPN64 = TRUE;
+      caps_in_use |= VMCI_CAPS_PPN64;
+   }
+
+   printk(KERN_INFO "VMCI: using capabilities 0x%x.\n", caps_in_use);
 
    /* Let the host know which capabilities we intend to use. */
-   outl(capabilities, ioaddr + VMCI_CAPS_ADDR);
+   outl(caps_in_use, ioaddr + VMCI_CAPS_ADDR);
 
    /* Device struct initialization. */
    compat_mutex_lock(&vmci_dev.lock);
@@ -1837,9 +1876,9 @@ vmci_probe_device(struct pci_dev *pdev,           // IN: vmci PCI device
     * Register notification bitmap with device if that capability is
     * used
     */
-   if (capabilities & VMCI_CAPS_NOTIFICATIONS) {
+   if ((caps_in_use & VMCI_CAPS_NOTIFICATIONS) != 0) {
       unsigned long bitmapPPN = notification_base >> PAGE_SHIFT;
-      if (!VMCI_RegisterNotificationBitmap(bitmapPPN)) {
+      if (!VMCI_RegisterNotificationBitmap(bitmapPPN, usePPN64)) {
          printk(KERN_ERR "VMCI device unable to register notification bitmap "
                 "with PPN 0x%x.\n", (uint32)bitmapPPN);
          goto datagram_disallow;
@@ -1921,7 +1960,7 @@ vmci_probe_device(struct pci_dev *pdev,           // IN: vmci PCI device
    compat_mutex_unlock(&vmci_dev.lock);
 
    /* Enable specific interrupt bits. */
-   if (capabilities & VMCI_CAPS_NOTIFICATIONS) {
+   if ((caps_in_use & VMCI_CAPS_NOTIFICATIONS) != 0) {
       outl(VMCI_IMR_DATAGRAM | VMCI_IMR_NOTIFICATION,
            vmci_dev.ioaddr + VMCI_IMR_ADDR);
    } else {
@@ -2019,10 +2058,10 @@ vmci_remove_device(struct pci_dev* pdev)
    dev->exclusive_vectors = FALSE;
    dev->intr_type = VMCI_INTR_TYPE_INTX;
 
-   tasklet_disable(&vmci_dg_tasklet);
-   tasklet_disable(&vmci_bm_tasklet);
    tasklet_kill(&vmci_dg_tasklet);
    tasklet_kill(&vmci_bm_tasklet);
+   tasklet_disable(&vmci_dg_tasklet);
+   tasklet_disable(&vmci_bm_tasklet);
 
    release_region(dev->ioaddr, dev->ioaddr_size);
    dev->enabled = FALSE;
@@ -2206,7 +2245,7 @@ int
 VMCI_SendDatagram(VMCIDatagram *dg)
 {
    unsigned long flags;
-   int result;
+   int result = -(~0);
 
    /* Check args. */
    if (dg == NULL) {
@@ -2477,7 +2516,7 @@ vmci_init(void)
 static void __exit
 vmci_exit(void)
 {
-   int retval = 0;
+   int retval;
 
    if (guestDeviceInit) {
       pci_unregister_driver(&vmci_driver);
@@ -2491,7 +2530,7 @@ vmci_exit(void)
 
       VMCI_HostCleanup();
 
-      misc_deregister(&linuxState.misc);
+      retval = compat_misc_deregister(&linuxState.misc);
       if (retval) {
          Warning(LGPFX "Module %s: error unregistering\n", VMCI_MODULE_NAME);
       } else {

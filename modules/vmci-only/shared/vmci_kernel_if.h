@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2006-2016 VMware, Inc. All rights reserved.
+ * Copyright (C) 2006-2016,2018 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -100,7 +100,7 @@ extern "C" {
   typedef Semaphore VMCIEvent;
   typedef Semaphore VMCIMutex;
   typedef World_ID VMCIHostVmID;
-  typedef uint32 VMCIHostUser;
+  typedef uint32_t VMCIHostUser;
   typedef PPN *VMCIQPGuestMem;
 #elif defined(__linux__)
   typedef spinlock_t VMCILock;

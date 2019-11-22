@@ -1193,20 +1193,22 @@ VSockVmciNotifyPktProcessNegotiate(struct sock *sk) // IN
 
 
 /* Socket control packet based operations. */
+
 VSockVmciNotifyOps vSockVmciNotifyPktOps __refdata = {
-   .socketInit = VSockVmciNotifyPktSocketInit,
-   .socketDestruct = VSockVmciNotifyPktSocketDestruct,
-   .pollIn = VSockVmciNotifyPktPollIn,
-   .pollOut = VSockVmciNotifyPktPollOut,
-   .handleNotifyPkt = VSockVmciNotifyPktHandlePkt,
-   .recvInit = VSockVmciNotifyPktRecvInit,
-   .recvPreBlock = VSockVmciNotifyPktRecvPreBlock,
-   .recvPreDequeue = VSockVmciNotifyPktRecvPreDequeue,
-   .recvPostDequeue = VSockVmciNotifyPktRecvPostDequeue,
-   .sendInit = VSockVmciNotifyPktSendInit,
-   .sendPreBlock = VSockVmciNotifyPktSendPreBlock,
-   .sendPreEnqueue = VSockVmciNotifyPktSendPreEnqueue,
-   .sendPostEnqueue = VSockVmciNotifyPktSendPostEnqueue,
-   .processRequest = VSockVmciNotifyPktProcessRequest,
+   .socketInit       = VSockVmciNotifyPktSocketInit,
+   .socketDestruct   = VSockVmciNotifyPktSocketDestruct,
+   .pollIn           = VSockVmciNotifyPktPollIn,
+   .pollOut 	     = VSockVmciNotifyPktPollOut,
+   .handleNotifyPkt  = VSockVmciNotifyPktHandlePkt,
+   .recvInit 	     = VSockVmciNotifyPktRecvInit,
+   .recvPreBlock     = VSockVmciNotifyPktRecvPreBlock,
+   .recvPreDequeue   = VSockVmciNotifyPktRecvPreDequeue,
+   .recvPostDequeue  = VSockVmciNotifyPktRecvPostDequeue,
+   .sendInit         = VSockVmciNotifyPktSendInit,
+   .sendPreBlock     = VSockVmciNotifyPktSendPreBlock,
+   .sendPreEnqueue   = VSockVmciNotifyPktSendPreEnqueue,
+   .sendPostEnqueue  = VSockVmciNotifyPktSendPostEnqueue,
+   .processRequest   = VSockVmciNotifyPktProcessRequest,
    .processNegotiate = VSockVmciNotifyPktProcessNegotiate,
 };
+

@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2007 VMware, Inc. All rights reserved.
+ * Copyright (C) 2007-2018 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -122,8 +122,8 @@ VSockAddr_InitNoFamily(struct sockaddr_vm *addr, // OUT
  *      zero.
  *
  * Results:
- *      0 on success, EFAULT if the address is null, EAFNOSUPPORT if the
- *      address is of the wrong family, and EINVAL if the reserved fields are
+ *      0 on success, VSOCK_EFAULT if the address is null, VSOCK_EAFNOSUPPORT if the
+ *      address is of the wrong family, and VSOCK_EINVAL if the reserved fields are
  *      not zero.
  *
  * Side effects:
@@ -138,17 +138,17 @@ VSockAddr_Validate(const struct sockaddr_vm *addr) // IN
    int32 err;
 
    if (NULL == addr) {
-      err = EFAULT;
+      err = VSOCK_EFAULT;
       goto exit;
    }
 
    if (VMCISockGetAFValueInt() != addr->svm_family) {
-      err = EAFNOSUPPORT;
+      err = VSOCK_EAFNOSUPPORT;
       goto exit;
    }
 
    if (0 != addr->svm_zero[0]) {
-      err = EINVAL;
+      err = VSOCK_EINVAL;
       goto exit;
    }
 
@@ -173,7 +173,7 @@ exit:
  *      retain the ordering or the error return values.
  *
  * Results:
- *      0 on success, EFAULT if the address is null and EINVAL if the reserved
+ *      0 on success, VSOCK_EFAULT if the address is null and VSOCK_EINVAL if the reserved
  *      fields are not zero.
  *
  * Side effects:
@@ -188,12 +188,12 @@ VSockAddr_ValidateNoFamily(const struct sockaddr_vm *addr) // IN
    int32 err;
 
    if (NULL == addr) {
-      err = EFAULT;
+      err = VSOCK_EFAULT;
       goto exit;
    }
 
    if (0 != addr->svm_zero[0]) {
-      err = EINVAL;
+      err = VSOCK_EINVAL;
       goto exit;
    }
 
@@ -320,7 +320,7 @@ VSockAddr_EqualsHandlePort(struct sockaddr_vm *addr, // IN
  *      The "outAddr" parameter contains the address if successful.
  *
  * Results:
- *      0 on success, EFAULT if the length is too small.  See
+ *      0 on success, VSOCK_EFAULT if the length is too small.  See
  *      VSockAddr_Validate() for other possible return codes.
  *
  * Side effects:
@@ -339,7 +339,7 @@ VSockAddr_Cast(const struct sockaddr *addr,  // IN
    ASSERT(outAddr);
 
    if (len < sizeof **outAddr) {
-      err = EFAULT;
+      err = VSOCK_EFAULT;
       goto exit;
    }
 

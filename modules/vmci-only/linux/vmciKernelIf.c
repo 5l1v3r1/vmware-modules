@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2007 VMware, Inc. All rights reserved.
+ * Copyright (C) 2007,2018 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -40,12 +40,8 @@
 #include <linux/socket.h>       /* For memcpy_{to,from}iovec(). */
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
-#include <linux/sched/signal.h> // signal_pending()
-#include <linux/skbuff.h> 
-#endif
-
+#include <linux/skbuff.h>
+#include <linux/sched/signal.h>
 #include "compat_highmem.h"
 #include "compat_interrupt.h"
 #include "compat_mm.h"
@@ -1140,11 +1136,29 @@ VMCI_PopulatePPNList(uint8 *callBuf,       // OUT:
                      const PPNSet *ppnSet) // IN:
 {
    ASSERT(callBuf && ppnSet && ppnSet->initialized);
-   memcpy(callBuf, ppnSet->producePPNs,
-          ppnSet->numProducePages * sizeof *ppnSet->producePPNs);
-   memcpy(callBuf + ppnSet->numProducePages * sizeof *ppnSet->producePPNs,
-          ppnSet->consumePPNs,
-          ppnSet->numConsumePages * sizeof *ppnSet->consumePPNs);
+
+   if (VMCI_UsePPN64Cap()) {
+      memcpy(callBuf, ppnSet->producePPNs,
+             ppnSet->numProducePages * sizeof *ppnSet->producePPNs);
+      memcpy(callBuf + ppnSet->numProducePages * sizeof *ppnSet->producePPNs,
+             ppnSet->consumePPNs,
+             ppnSet->numConsumePages * sizeof *ppnSet->consumePPNs);
+   } else {
+      /* Backend doesn't use 64 bit PPN */
+
+      int i;
+      PPN32 *ppns = (PPN32 *)callBuf;
+
+      for (i = 0; i < ppnSet->numProducePages; i++) {
+         ppns[i] = VMCI_PPN64_TO_PPN32(ppnSet->producePPNs[i]);
+      }
+
+      ppns = &ppns[ppnSet->numProducePages];
+
+      for (i = 0; i < ppnSet->numConsumePages; i++) {
+         ppns[i] = VMCI_PPN64_TO_PPN32(ppnSet->consumePPNs[i]);
+      }
+   }
 
    return VMCI_SUCCESS;
 }
@@ -1203,16 +1217,29 @@ __VMCIMemcpyToQueue(VMCIQueue *queue,   // OUT:
       }
 
       if (isIovec) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
+         struct iovec *iov = (struct iovec *)src;
+#else
          struct msghdr *msg = (struct msghdr *)src;
+#endif
          int err;
 
          /* The iovec will track bytesCopied internally. */
-	 err = memcpy_to_msg(msg, (uint8 *)va + pageOffset, toCopy);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
+         err = memcpy_fromiovec((uint8 *)va + pageOffset, iov, toCopy);
+#else
+         err = memcpy_from_msg((uint8 *)va + pageOffset, msg, toCopy);
+#endif
          if (err != 0) {
             if (kernelIf->host) {
                kunmap(kernelIf->u.h.page[pageIndex]);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
             }
             return VMCI_ERROR_INVALID_ARGS;
+#else
+              return VMCI_ERROR_INVALID_ARGS;
+            }
+#endif
          }
       } else {
          memcpy((uint8 *)va + pageOffset, (uint8 *)src + bytesCopied, toCopy);
@@ -1278,11 +1305,19 @@ __VMCIMemcpyFromQueue(void *dest,             // OUT:
       }
 
       if (isIovec) {
-	 struct msghdr *msg = (struct msghdr *)dest;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
+         struct iovec *iov = (struct iovec *)dest;
+#else
+         struct msghdr *msg = (struct msghdr *)dest;
+#endif
          int err;
 
          /* The iovec will track bytesCopied internally. */
-	 err = memcpy_to_msg(msg, (uint8 *)va + pageOffset, toCopy);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
+         err = memcpy_toiovec(iov, (uint8 *)va + pageOffset, toCopy);
+#else
+         err = memcpy_to_msg(msg, (uint8 *)va + pageOffset, toCopy);
+#endif
          if (err != 0) {
             if (kernelIf->host) {
                kunmap(kernelIf->u.h.page[pageIndex]);
@@ -1839,7 +1874,11 @@ VMCIReleasePages(struct page **pages,  // IN
       if (dirty) {
          set_page_dirty(pages[i]);
       }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 99)
       put_page(pages[i]);
+#else
+      page_cache_release(pages[i]);
+#endif
       pages[i] = NULL;
    }
 }
@@ -2053,21 +2092,22 @@ VMCIHost_GetUserMemory(VA64 produceUVA,       // IN
    int err = VMCI_SUCCESS;
 
    down_write(&current->mm->mmap_sem);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 6, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 99)
    retval = get_user_pages((VA)produceUVA,
-                           produceQ->kernelIf->numPages,
-                           1,
-                           produceQ->kernelIf->u.h.headerPage,
-                           NULL);
 #else
    retval = get_user_pages(current,
                            current->mm,
                            (VA)produceUVA,
+#endif
                            produceQ->kernelIf->numPages,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
                            1, 0,
+#else
+                           FOLL_WRITE,
+#endif
                            produceQ->kernelIf->u.h.headerPage,
                            NULL);
-#endif
+
    if (retval < produceQ->kernelIf->numPages) {
       Log("get_user_pages(produce) failed (retval=%d)\n", retval);
       VMCIReleasePages(produceQ->kernelIf->u.h.headerPage, retval, FALSE);
@@ -2075,10 +2115,20 @@ VMCIHost_GetUserMemory(VA64 produceUVA,       // IN
       goto out;
    }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 99)
    retval = get_user_pages((VA)consumeUVA,
+#else
+   retval = get_user_pages(current,
+                           current->mm,
+                           (VA)consumeUVA,
+#endif
                            consumeQ->kernelIf->numPages,
-                           1,
-			   consumeQ->kernelIf->u.h.headerPage,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+                           1, 0,
+#else
+                           FOLL_WRITE,
+#endif
+                           consumeQ->kernelIf->u.h.headerPage,
                            NULL);
    if (retval < consumeQ->kernelIf->numPages) {
       Log("get_user_pages(consume) failed (retval=%d)\n", retval);

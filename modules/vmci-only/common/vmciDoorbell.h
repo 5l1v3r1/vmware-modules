@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2010-2013 VMware, Inc. All rights reserved.
+ * Copyright (C) 2010-2013,2018 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -41,7 +41,7 @@ void VMCIDoorbell_Sync(void);
 int VMCIDoorbellHostContextNotify(VMCIId srcCID, VMCIHandle handle);
 int VMCIDoorbellGetPrivFlags(VMCIHandle handle, VMCIPrivilegeFlags *privFlags);
 
-Bool VMCI_RegisterNotificationBitmap(PPN bitmapPPN);
+Bool VMCI_RegisterNotificationBitmap(PPN bitmapPPN, Bool isPPN64);
 void VMCI_ScanNotificationBitmap(uint8 *bitmap);
 
 #endif // VMCI_DOORBELL_H

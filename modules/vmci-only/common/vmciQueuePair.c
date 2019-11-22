@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2007-2016 VMware, Inc. All rights reserved.
+ * Copyright (C) 2007-2019 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -164,6 +164,7 @@ typedef struct QPBrokerEntry {
    Bool                 requireTrustedAttach;
    Bool                 createdByTrusted;
    Bool                 vmciPageFiles;  // Created by VMX using VMCI page files
+   uint8                detachCause;
    VMCIQueue           *produceQ;
    VMCIQueue           *consumeQ;
    VMCIQueueHeader      savedProduceQ;
@@ -371,6 +372,54 @@ VMCIQueuePair_Detach(VMCIHandle handle,   // IN
       return VMCIQueuePairDetachHostWork(handle);
    }
 }
+
+
+#if defined(VMKERNEL)
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * VMCIQueuePair_GetDetachCause --
+ *
+ *      Retrieves the cause of a peer detach from a VMCI QueuePair.
+ *
+ * Results:
+ *      Success or failure.
+ *
+ * Side effects:
+ *      None.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+int
+VMCIQueuePair_GetDetachCause(VMCIHandle handle, // IN
+                             uint8 *cause)      // OUT
+{
+   QPBrokerEntry *entry;
+   int result = VMCI_SUCCESS;
+
+   if (VMCI_HANDLE_INVALID(handle)) {
+      return VMCI_ERROR_INVALID_ARGS;
+   }
+
+   VMCIQPBrokerLock();
+
+   entry = (QPBrokerEntry *)QueuePairList_FindEntry(&qpBrokerList, handle);
+   if (!entry) {
+      result = VMCI_ERROR_NOT_FOUND;
+      goto out;
+   }
+
+   if (cause != NULL) {
+      *cause = entry->detachCause;
+   }
+
+out:
+   VMCIQPBrokerUnlock();
+
+   return result;
+}
+#endif
 
 
 /*
@@ -1714,6 +1763,9 @@ VMCIQPBroker_Detach(VMCIHandle  handle,   // IN
       VMCIContext_QueuePairDestroy(context, handle);
    } else {
       ASSERT(peerId != VMCI_INVALID_ID);
+#if defined (VMKERNEL)
+      entry->detachCause = context->quiesceCause;
+#endif
       QueuePairNotifyPeer(FALSE, handle, contextId, peerId);
       if (contextId == VMCI_HOST_CONTEXT_ID && QPBROKERSTATE_HAS_MEM(entry)) {
          entry->state = VMCIQPB_SHUTDOWN_MEM;
@@ -2137,7 +2189,7 @@ VMCIQPGuestEndpoints_Init(void)
       return err;
    }
 
-   hibernateFailedList = VMCIHandleArray_Create(0);
+   hibernateFailedList = VMCIHandleArray_Create(0, VMCI_MAX_GUEST_QP_COUNT);
    if (NULL == hibernateFailedList) {
       QueuePairList_Destroy(&qpGuestEndpoints);
       return VMCI_ERROR_NO_MEM;
@@ -2375,6 +2427,7 @@ VMCIQueuePairAllocHypercall(const QPGuestEndpoint *entry) // IN
 {
    VMCIQueuePairAllocMsg *allocMsg;
    size_t msgSize;
+   size_t ppnSize;
    int result;
 
    if (!entry || entry->numPPNs <= 2) {
@@ -2383,7 +2436,9 @@ VMCIQueuePairAllocHypercall(const QPGuestEndpoint *entry) // IN
 
    ASSERT(!(entry->qp.flags & VMCI_QPFLAG_LOCAL));
 
-   msgSize = sizeof *allocMsg + (size_t)entry->numPPNs * sizeof(PPN);
+   ppnSize = VMCI_UsePPN64Cap() ? sizeof (PPN) : sizeof (PPN32);
+
+   msgSize = sizeof *allocMsg + (size_t)entry->numPPNs * ppnSize;
    allocMsg = VMCI_AllocKernelMem(msgSize, VMCI_MEMORY_NONPAGED);
    if (!allocMsg) {
       return VMCI_ERROR_NO_MEM;

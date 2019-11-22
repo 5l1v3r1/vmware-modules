@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2010-2016 VMware, Inc. All rights reserved.
+ * Copyright (C) 2010-2017 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -626,6 +626,42 @@ vmci_qpair_detach(VMCIQPair **qpair) // IN/OUT
    *qpair = NULL;
 
    return result;
+}
+
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * vmci_qpair_get_detach_cause --
+ *
+ *      This is the client interface for retrieving the cause of a
+ *      peer detach from a queue pair.
+ *
+ * Results:
+ *      An error, if < 0.
+ *
+ * Side effects:
+ *      None.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+VMCI_EXPORT_SYMBOL(vmci_qpair_get_detach_cause)
+int
+vmci_qpair_get_detach_cause(VMCIQPair *qpair, // IN
+                            uint8 *cause)     // OUT
+{
+#if defined(VMKERNEL)
+   if (!qpair) {
+      return VMCI_ERROR_INVALID_ARGS;
+   }
+
+   return VMCIQueuePair_GetDetachCause(qpair->handle, cause);
+#else
+   UNREFERENCED_PARAMETER(qpair);
+   UNREFERENCED_PARAMETER(cause);
+   return VMCI_ERROR_UNAVAILABLE;
+#endif
 }
 
 

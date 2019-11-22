@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2007,2014 VMware, Inc. All rights reserved.
+ * Copyright (C) 2007,2014,2019 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -60,7 +60,7 @@
 #  define VMCI_SOCKETS_AF_VALUE AF_VMCI /* Defined in uwvmkAPI.h. */
    /* The address family is fixed in the vmkernel. */
 #  define VMCISockGetAFValueInt() VMCI_SOCKETS_AF_VALUE
-#elif defined linux
+#elif defined __linux__
 #  if defined __KERNEL__
    /* Include compat_page.h now so PAGE_SIZE and friends don't get redefined. */
 #     include "driver-config.h"

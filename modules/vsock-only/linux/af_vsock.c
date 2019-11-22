@@ -107,6 +107,11 @@
 #include <linux/wait.h>
 #include <linux/init.h>
 #include <asm/io.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/signal.h>
+#endif
+
 #if defined(__x86_64__) && LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 12)
 #   include <linux/ioctl32.h>
 /* Use weak: not all kernels export sys_ioctl for use by modules */
@@ -218,8 +223,7 @@ static int VSockVmciDgramConnect(struct socket *sock,
 static int VSockVmciStreamConnect(struct socket *sock,
                                   struct sockaddr *addr, int addrLen, int flags);
 static int VSockVmciAccept(struct socket *sock, struct socket *newsock, int flags, bool kern);
-static int VSockVmciGetname(struct socket *sock,
-                            struct sockaddr *addr, int *addrLen, int peer);
+static int VSockVmciGetname(struct socket *sock, struct sockaddr *addr, int peer);
 static unsigned int VSockVmciPoll(struct file *file,
                                   struct socket *sock, poll_table *wait);
 static int VSockVmciListen(struct socket *sock, int backlog);
@@ -2877,7 +2881,9 @@ __VSockVmciCreate(struct net *net,       // IN: Network namespace
     * network namespace, and the option to zero the sock was dropped.
     *
     */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 12)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
+     sk = sk_alloc(net, vsockVmciFamilyOps.family, priority, &vsockVmciProto, 1);
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 12)
    sk = sk_alloc(vsockVmciFamilyOps.family, priority,
                  vsockVmciProto.slab_obj_size, vsockVmciProto.slab);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24)
@@ -3931,7 +3937,6 @@ out:
 static int
 VSockVmciGetname(struct socket *sock,    // IN
                  struct sockaddr *addr,  // OUT
-                 int *addrLen,           // OUT
                  int peer)               // IN
 {
    int err;
@@ -3967,7 +3972,6 @@ VSockVmciGetname(struct socket *sock,    // IN
     */
    ASSERT_ON_COMPILE(sizeof *vmciAddr <= 128);
    memcpy(addr, vmciAddr, sizeof *vmciAddr);
-   *addrLen = sizeof *vmciAddr;
 
 out:
    release_sock(sk);
@@ -4346,7 +4350,7 @@ VSockVmciDgramSendmsg(struct socket *sock,          // IN: socket to send on
    /*
     * Allocate a buffer for the user's message and our packet header.
     */
-   dg = kmalloc(len + sizeof *dg, GFP_KERNEL);
+   dg = kzalloc(len + sizeof *dg, GFP_KERNEL);
    if (!dg) {
       err = -ENOMEM;
       goto out;
@@ -4808,9 +4812,9 @@ VSockVmciDgramRecvmsg(struct socket *sock,          // IN: socket to receive fro
    }
 
    /* Place the datagram payload in the user's iovec. */
+   // err = skb_copy_datagram_iovec(skb, sizeof *dg, msg->msg_iter, payloadLen);
    iov_iter_init(&to, READ, (struct iovec *)&msg->msg_iter.iov, 1, payloadLen);
    err = skb_copy_datagram_iter(skb, 0, &to, payloadLen);
-
    if (err) {
       goto out;
    }
@@ -4955,9 +4959,9 @@ VSockVmciStreamRecvmsg(struct socket *sock,          // IN: socket to receive fr
          }
 
          if (flags & MSG_PEEK) {
-	    read = vmci_qpair_peekv(vsk->qpair, &msg->msg_iter.iov, len - copied, 0);
+            read = vmci_qpair_peekv(vsk->qpair, &msg->msg_iter.iov, len - copied, 0);
          } else {
-	    read = vmci_qpair_dequev(vsk->qpair, &msg->msg_iter.iov, len - copied, 0);
+            read = vmci_qpair_dequev(vsk->qpair, &msg->msg_iter.iov, len - copied, 0);
          }
 
          if (read < 0) {
@@ -5488,7 +5492,7 @@ MODULE_INFO(supported, "external");
 module_param(PROTOCOL_OVERRIDE, int, 0444);
 MODULE_PARM_DESC(PROTOCOL_OVERRIDE, "Specify a vsock protocol (auto negotiated by default");
 
-int LOGLEVEL_THRESHOLD = 0;
+int LOGLEVEL_THRESHOLD = 4;
 module_param(LOGLEVEL_THRESHOLD, int, 0444);
 MODULE_PARM_DESC(LOGLEVEL_THRESHOLD, "Set verbosity (0 means no log, 10 means very verbose, 4 is default)");
 #endif

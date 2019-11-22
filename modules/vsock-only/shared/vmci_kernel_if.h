@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2006-2016 VMware, Inc. All rights reserved.
+ * Copyright (C) 2006-2016,2018 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -109,7 +109,7 @@ extern "C" {
   typedef struct semaphore VMCIMutex;
   typedef PPN *VMCIPpnList; /* List of PPNs in produce/consume queue. */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)
-  typedef kuid_t VMCIHostUser;
+  typedef uid_t VMCIHostUser;
 #else
   typedef uid_t VMCIHostUser;
 #endif

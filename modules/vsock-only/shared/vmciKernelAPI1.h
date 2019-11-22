@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2010 VMware, Inc. All rights reserved.
+ * Copyright (C) 2010,2018 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -115,9 +115,9 @@ typedef void (*VMCI_EventCB)(VMCIId subID, VMCI_EventData *ed,
                              void *clientData);
 
 int vmci_event_subscribe(VMCI_Event event,
-#if !defined(__linux__) || defined(VMKERNEL)
+#if !defined(__linux__) && !defined(__FreeBSD__) || defined(VMKERNEL)
                          uint32 flags,
-#endif // !linux || VMKERNEL
+#endif // !linux && !FreeBSD || VMKERNEL
                          VMCI_EventCB callback,
                          void *callbackData, VMCIId *subID);
 int vmci_event_unsubscribe(VMCIId subID);

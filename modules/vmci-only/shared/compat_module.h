@@ -80,4 +80,13 @@ static const char __module_cat(tag, __LINE__)[]                               \
    typedef int compat_mod_param_bool;
 #endif
 
+/*
+ * Linux kernel >= 4.2.99 does not return anything from misc_deregister
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 99)
+#define compat_misc_deregister(misc) misc_deregister(misc)
+#else
+#define compat_misc_deregister(misc) ({misc_deregister(misc);0;})
+#endif
+
 #endif /* __COMPAT_MODULE_H__ */

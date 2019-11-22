@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 1998-2017 VMware, Inc. All rights reserved.
+ * Copyright (C) 1998-2019 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -53,7 +53,7 @@
 #include <linux/wait.h>
 #include <linux/hrtimer.h>
 #include <linux/signal.h>
-#include <linux/taskstats_kern.h> // For linux/sched/signal.h without version check
+#include <linux/taskstats_kern.h>	// For linux/sched/signal.h without version check
 
 #include "vmware.h"
 #include "x86apic.h"
@@ -63,7 +63,7 @@
 #include "memtrack.h"
 #include "phystrack.h"
 #include "cpuid.h"
-#include "cpuid_info.h"
+#include "x86cpuid_asm.h"
 #include "hostif.h"
 #include "hostif_priv.h"
 #include "vmhost.h"
@@ -115,12 +115,13 @@
  */
 #define LOCKED_PAGE_SLACK 10000
 
-static struct {
-   Atomic_uint64     uptimeBase;
-   VersionedAtomic   version;
-   uint64            monotimeBase;
-   unsigned long     jiffiesBase;
-   struct timer_list timer;
+static struct
+{
+  Atomic_uint64 uptimeBase;
+  VersionedAtomic version;
+  uint64 monotimeBase;
+  unsigned long jiffiesBase;
+  struct timer_list timer;
 } uptimeState;
 
 /*
@@ -177,6 +178,8 @@ static struct {
    put_page(pfn_to_page(_pfn));                          \
 } while (0)
 
+static void UnlockEntry (void *clientData, MemTrackEntry * entryPtr);
+
 uint8 monitorIPIVector;
 uint8 hvIPIVector;
 
@@ -198,18 +201,18 @@ uint8 hvIPIVector;
 
 #ifdef VMX86_DEBUG
 static INLINE void
-MutexInit(Mutex *mutex,     // IN
-          char const *name) // IN
+MutexInit (Mutex * mutex,	// IN
+	   char const *name)	// IN
 {
-   ASSERT(mutex);
-   ASSERT(name);
+  ASSERT (mutex);
+  ASSERT (name);
 
-   sema_init(&mutex->sem, 1);
-   mutex->name = name;
-   mutex->cur.pid = -1;
+  sema_init (&mutex->sem, 1);
+  mutex->name = name;
+  mutex->cur.pid = -1;
 }
 #else
-#   define MutexInit(_mutex, _name) sema_init(&(_mutex)->sem, 1)
+#define MutexInit(_mutex, _name) sema_init(&(_mutex)->sem, 1)
 #endif
 
 
@@ -232,11 +235,11 @@ MutexInit(Mutex *mutex,     // IN
  */
 
 static INLINE Bool
-MutexIsLocked(Mutex *mutex) // IN
+MutexIsLocked (Mutex * mutex)	// IN
 {
-   ASSERT(mutex);
+  ASSERT (mutex);
 
-   return mutex->cur.pid == current->pid;
+  return mutex->cur.pid == current->pid;
 }
 #endif
 
@@ -259,18 +262,18 @@ MutexIsLocked(Mutex *mutex) // IN
 
 #ifdef VMX86_DEBUG
 static INLINE void
-MutexLock(Mutex *mutex, // IN
-          int callerID) // IN
+MutexLock (Mutex * mutex,	// IN
+	   int callerID)	// IN
 {
-   ASSERT(mutex);
-   ASSERT(!MutexIsLocked(mutex));
+  ASSERT (mutex);
+  ASSERT (!MutexIsLocked (mutex));
 
-   down(&mutex->sem);
-   mutex->cur.pid = current->pid;
-   mutex->cur.callerID = callerID;
+  down (&mutex->sem);
+  mutex->cur.pid = current->pid;
+  mutex->cur.callerID = callerID;
 }
 #else
-#   define MutexLock(_mutex, _callerID) down(&(_mutex)->sem)
+#define MutexLock(_mutex, _callerID) down(&(_mutex)->sem)
 #endif
 
 
@@ -292,18 +295,18 @@ MutexLock(Mutex *mutex, // IN
 
 #ifdef VMX86_DEBUG
 static INLINE void
-MutexUnlock(Mutex *mutex, // IN
-            int callerID) // IN
+MutexUnlock (Mutex * mutex,	// IN
+	     int callerID)	// IN
 {
-   ASSERT(mutex);
+  ASSERT (mutex);
 
-   ASSERT(MutexIsLocked(mutex) && mutex->cur.callerID == callerID);
-   mutex->prev = mutex->cur;
-   mutex->cur.pid = -1;
-   up(&mutex->sem);
+  ASSERT (MutexIsLocked (mutex) && mutex->cur.callerID == callerID);
+  mutex->prev = mutex->cur;
+  mutex->cur.pid = -1;
+  up (&mutex->sem);
 }
 #else
-#   define MutexUnlock(_mutex, _callerID) up(&(_mutex)->sem)
+#define MutexUnlock(_mutex, _callerID) up(&(_mutex)->sem)
 #endif
 
 
@@ -337,12 +340,13 @@ static Mutex fastClockMutex;
  */
 
 Bool
-HostIF_PrepareWaitForThreads(VMDriver *vm,     // IN:
-                             Vcpuid currVcpu)  // IN:
+HostIF_PrepareWaitForThreads (VMDriver * vm,	// IN:
+			      Vcpuid currVcpu)	// IN:
 {
-   set_current_state(TASK_INTERRUPTIBLE);
-   vm->vmhost->vcpuSemaTask[currVcpu] = current;
-   return FALSE;
+  ASSERT (currVcpu < vm->numVCPUs);
+  set_current_state (TASK_INTERRUPTIBLE);
+  vm->vmhost->vcpuSemaTask[currVcpu] = current;
+  return FALSE;
 }
 
 
@@ -363,12 +367,11 @@ HostIF_PrepareWaitForThreads(VMDriver *vm,     // IN:
  */
 
 void
-HostIF_WaitForThreads(VMDriver *vm,     // UNUSED:
-                      Vcpuid currVcpu)  // UNUSED:
-
+HostIF_WaitForThreads (VMDriver * vm,	// UNUSED:
+		       Vcpuid currVcpu)	// UNUSED:
 {
-   ktime_t timeout = ktime_set(0, CROSSCALL_SLEEP_US * 1000);
-   schedule_hrtimeout(&timeout, HRTIMER_MODE_REL);
+  ktime_t timeout = ktime_set (0, CROSSCALL_SLEEP_US * 1000);
+  schedule_hrtimeout (&timeout, HRTIMER_MODE_REL);
 }
 
 
@@ -389,11 +392,12 @@ HostIF_WaitForThreads(VMDriver *vm,     // UNUSED:
  */
 
 void
-HostIF_CancelWaitForThreads(VMDriver *vm,     // IN:
-                            Vcpuid currVcpu)  // IN:
+HostIF_CancelWaitForThreads (VMDriver * vm,	// IN:
+			     Vcpuid currVcpu)	// IN:
 {
-   vm->vmhost->vcpuSemaTask[currVcpu] = NULL;
-   set_current_state(TASK_RUNNING);
+  ASSERT (currVcpu < vm->numVCPUs);
+  vm->vmhost->vcpuSemaTask[currVcpu] = NULL;
+  set_current_state (TASK_RUNNING);
 }
 
 
@@ -415,38 +419,43 @@ HostIF_CancelWaitForThreads(VMDriver *vm,     // IN:
  */
 
 void
-HostIF_WakeUpYielders(VMDriver *vm,     // IN:
-                      Vcpuid currVcpu)  // IN:
+HostIF_WakeUpYielders (VMDriver * vm,	// IN:
+		       Vcpuid currVcpu)	// IN:
 {
-   VCPUSet req;
-   Vcpuid vcpuid;
-   uint64 subset;
+  VCPUSet req;
+  Vcpuid vcpuid;
+  uint64 subset;
 
-   /*
-    * PR 1142958: if the VCPUs woken in the crosscallWaitSet re-add themselves
-    * to this set faster than it can be fully drained, this function never
-    * exits.  Instead, we copy and remove a snapshot of the crosscallWaitSet
-    * and locally wake up just that snapshot.  It is ok that we don't get a
-    * fully coherent snapshot, as long as the subset copy-and-remove is atomic
-    * so no VCPU added is lost entirely.
-    */
+  /*
+   * PR 1142958: if the VCPUs woken in the crosscallWaitSet re-add themselves
+   * to this set faster than it can be fully drained, this function never
+   * exits.  Instead, we copy and remove a snapshot of the crosscallWaitSet
+   * and locally wake up just that snapshot.  It is ok that we don't get a
+   * fully coherent snapshot, as long as the subset copy-and-remove is atomic
+   * so no VCPU added is lost entirely.
+   */
+  ASSERT (currVcpu < vm->numVCPUs);
+  VCPUSet_Empty (&req);
+  FOR_EACH_POPULATED_SUBSET_IN_SET (subIdx, vm->numVCPUs)
+  {
+    subset = VCPUSet_AtomicReadWriteSubset (&vm->crosscallWaitSet[currVcpu],
+					    0, subIdx);
+    VCPUSet_UnionSubset (&req, subset, subIdx);
+  } ROF_EACH_POPULATED_SUBSET_IN_SET ();
 
-   VCPUSet_Empty(&req);
-   FOR_EACH_SUBSET_IN_SET(subIdx) {
-      subset = VCPUSet_AtomicReadWriteSubset(&vm->crosscallWaitSet[currVcpu],
-                                             0, subIdx);
-      VCPUSet_UnionSubset(&req, subset, subIdx);
-   } ROF_EACH_SUBSET_IN_SET();
-
-   preempt_disable();
-   while ((vcpuid = VCPUSet_FindFirst(&req)) != VCPUID_INVALID) {
-      struct task_struct *t = vm->vmhost->vcpuSemaTask[vcpuid];
-      VCPUSet_Remove(&req, vcpuid);
-      if (t && (t->state & TASK_INTERRUPTIBLE)) {
-         wake_up_process(t);
-      }
-   }
-   preempt_enable();
+  preempt_disable ();
+  while ((vcpuid = VCPUSet_FindFirst (&req)) != VCPUID_INVALID)
+    {
+      struct task_struct *t;
+      ASSERT (vcpuid < vm->numVCPUs);
+      t = vm->vmhost->vcpuSemaTask[vcpuid];
+      VCPUSet_Remove (&req, vcpuid);
+      if (t && (t->state & TASK_INTERRUPTIBLE))
+	{
+	  wake_up_process (t);
+	}
+    }
+  preempt_enable ();
 }
 
 
@@ -467,10 +476,10 @@ HostIF_WakeUpYielders(VMDriver *vm,     // IN:
  */
 
 void
-HostIF_InitGlobalLock(void)
+HostIF_InitGlobalLock (void)
 {
-   MutexInit(&globalMutex, "global");
-   MutexInit(&fastClockMutex, "fastClock");
+  MutexInit (&globalMutex, "global");
+  MutexInit (&fastClockMutex, "fastClock");
 }
 
 
@@ -492,9 +501,9 @@ HostIF_InitGlobalLock(void)
  */
 
 void
-HostIF_GlobalLock(int callerID) // IN
+HostIF_GlobalLock (int callerID)	// IN
 {
-   MutexLock(&globalMutex, callerID);
+  MutexLock (&globalMutex, callerID);
 }
 
 
@@ -515,9 +524,9 @@ HostIF_GlobalLock(int callerID) // IN
  */
 
 void
-HostIF_GlobalUnlock(int callerID) // IN
+HostIF_GlobalUnlock (int callerID)	// IN
 {
-   MutexUnlock(&globalMutex, callerID);
+  MutexUnlock (&globalMutex, callerID);
 }
 
 
@@ -540,9 +549,9 @@ HostIF_GlobalUnlock(int callerID) // IN
  */
 
 Bool
-HostIF_GlobalLockIsHeld(void)
+HostIF_GlobalLockIsHeld (void)
 {
-   return MutexIsLocked(&globalMutex);
+  return MutexIsLocked (&globalMutex);
 }
 #endif
 
@@ -565,9 +574,9 @@ HostIF_GlobalLockIsHeld(void)
  */
 
 void
-HostIF_FastClockLock(int callerID) // IN
+HostIF_FastClockLock (int callerID)	// IN
 {
-   MutexLock(&fastClockMutex, callerID);
+  MutexLock (&fastClockMutex, callerID);
 }
 
 
@@ -588,9 +597,9 @@ HostIF_FastClockLock(int callerID) // IN
  */
 
 void
-HostIF_FastClockUnlock(int callerID) // IN
+HostIF_FastClockUnlock (int callerID)	// IN
 {
-   MutexUnlock(&fastClockMutex, callerID);
+  MutexUnlock (&fastClockMutex, callerID);
 }
 
 
@@ -611,18 +620,18 @@ HostIF_FastClockUnlock(int callerID) // IN
  *----------------------------------------------------------------------
  */
 static void *
-MapCrossPage(struct page *p)  // IN:
+MapCrossPage (struct page *p)	// IN:
 {
-   return vmap(&p, 1, VM_MAP, VM_PAGE_KERNEL_EXEC);
+  return vmap (&p, 1, VM_MAP, VM_PAGE_KERNEL_EXEC);
 }
 
 
 static void
-UnmapCrossPage(struct page *p,  // IN:
-               void *va)        // IN:
+UnmapCrossPage (struct page *p,	// IN:
+		void *va)	// IN:
 {
-   vunmap(va);
-   put_page(p);
+  vunmap (va);
+  put_page (p);
 }
 
 
@@ -644,20 +653,22 @@ UnmapCrossPage(struct page *p,  // IN:
  */
 
 static int
-HostIFHostMemInit(VMDriver *vm)  // IN:
+HostIFHostMemInit (VMDriver * vm)	// IN:
 {
-   VMHost *vmh = vm->vmhost;
+  VMHost *vmh = vm->vmhost;
 
-   vmh->lockedPages = PhysTrack_Alloc(vm);
-   if (!vmh->lockedPages) {
+  vmh->lockedPages = PhysTrack_Alloc (vm);
+  if (!vmh->lockedPages)
+    {
       return -1;
-   }
-   vmh->AWEPages = PhysTrack_Alloc(vm);
-   if (!vmh->AWEPages) {
+    }
+  vmh->AWEPages = PhysTrack_Alloc (vm);
+  if (!vmh->AWEPages)
+    {
       return -1;
-   }
+    }
 
-   return 0;
+  return 0;
 }
 
 
@@ -678,35 +689,40 @@ HostIFHostMemInit(VMDriver *vm)  // IN:
  */
 
 static void
-HostIFHostMemCleanup(VMDriver *vm)  // IN:
+HostIFHostMemCleanup (VMDriver * vm)	// IN:
 {
-   MPN mpn;
-   VMHost *vmh = vm->vmhost;
+  MPN mpn;
+  VMHost *vmh = vm->vmhost;
 
-   if (!vmh) {
+  if (!vmh)
+    {
       return;
-   }
+    }
 
-   HostIF_VMLock(vm, 32); // Debug version of PhysTrack wants VM's lock.
-   if (vmh->lockedPages) {
+  HostIF_VMLock (vm, 32);	// Debug version of PhysTrack wants VM's lock.
+  if (vmh->lockedPages)
+    {
       for (mpn = 0;
-           INVALID_MPN != (mpn = PhysTrack_GetNext(vmh->lockedPages, mpn));) {
-         HOST_UNLOCK_PFN_BYMPN(vm, mpn);
-      }
-      PhysTrack_Free(vmh->lockedPages);
+	   INVALID_MPN != (mpn = PhysTrack_GetNext (vmh->lockedPages, mpn));)
+	{
+	  HOST_UNLOCK_PFN_BYMPN (vm, mpn);
+	}
+      PhysTrack_Free (vmh->lockedPages);
       vmh->lockedPages = NULL;
-   }
+    }
 
-   if (vmh->AWEPages) {
+  if (vmh->AWEPages)
+    {
       for (mpn = 0;
-           INVALID_MPN != (mpn = PhysTrack_GetNext(vmh->AWEPages, mpn));) {
-         PhysTrack_Remove(vmh->AWEPages, mpn);
-         put_page(pfn_to_page(mpn));
-      }
-      PhysTrack_Free(vmh->AWEPages);
+	   INVALID_MPN != (mpn = PhysTrack_GetNext (vmh->AWEPages, mpn));)
+	{
+	  PhysTrack_Remove (vmh->AWEPages, mpn);
+	  put_page (pfn_to_page (mpn));
+	}
+      PhysTrack_Free (vmh->AWEPages);
       vmh->AWEPages = NULL;
-   }
-   HostIF_VMUnlock(vm, 32);
+    }
+  HostIF_VMUnlock (vm, 32);
 }
 
 
@@ -729,11 +745,11 @@ HostIFHostMemCleanup(VMDriver *vm)  // IN:
  */
 
 MPN
-HostIF_AllocMachinePage(void)
+HostIF_AllocMachinePage (void)
 {
-  struct page *pg = alloc_page(GFP_HIGHUSER);
+  struct page *pg = alloc_page (GFP_HIGHUSER);
 
-  return (pg) ? ((MPN)page_to_pfn(pg)) : INVALID_MPN;
+  return (pg) ? ((MPN) page_to_pfn (pg)) : INVALID_MPN;
 }
 
 
@@ -756,11 +772,11 @@ HostIF_AllocMachinePage(void)
  */
 
 void
-HostIF_FreeMachinePage(MPN mpn)  // IN:
+HostIF_FreeMachinePage (MPN mpn)	// IN:
 {
-  struct page *pg = pfn_to_page(mpn);
+  struct page *pg = pfn_to_page (mpn);
 
-  __free_page(pg);
+  __free_page (pg);
 }
 
 
@@ -781,45 +797,52 @@ HostIF_FreeMachinePage(MPN mpn)  // IN:
  *----------------------------------------------------------------------
  */
 
-int
-HostIF_AllocLockedPages(VMDriver *vm,         // IN: VM instance pointer
-                        VA64 addr,            // OUT: buffer address
-                        unsigned numPages,    // IN: number of pages to allocate
-                        Bool kernelMPNBuffer) // IN: kernel vs user space
+int64
+HostIF_AllocLockedPages (VMDriver * vm,	// IN: VM instance pointer
+			 VA64 addr,	// OUT: buffer address
+			 PageCnt numPages,	// IN: number of pages to allocate
+			 Bool kernelMPNBuffer)	// IN: kernel vs user space
 {
-   VMHost *vmh = vm->vmhost;
-   unsigned int cnt;
-   int err = 0;
+  VMHost *vmh = vm->vmhost;
+  PageCnt cnt;
+  int64 err = 0;
 
-   if (!vmh || !vmh->AWEPages) {
+  if (!vmh || !vmh->AWEPages)
+    {
       return -EINVAL;
-   }
-   for (cnt = 0; cnt < numPages; cnt++) {
-      struct page* pg;
+    }
+  for (cnt = 0; cnt < numPages; cnt++)
+    {
+      struct page *pg;
       MPN mpn;
 
-      pg = alloc_page(GFP_HIGHUSER);
-      if (!pg) {
-         err = -ENOMEM;
-         break;
-      }
-      mpn = (MPN)page_to_pfn(pg);
-      if (kernelMPNBuffer) {
-         MPN *pmpn = VA64ToPtr(addr);
-         *pmpn = mpn;
-      } else if (HostIF_CopyToUser(addr, &mpn, sizeof mpn) != 0) {
-         __free_page(pg);
-         err = -EFAULT;
-         break;
-      }
+      pg = alloc_page (GFP_HIGHUSER);
+      if (!pg)
+	{
+	  err = -ENOMEM;
+	  break;
+	}
+      mpn = (MPN) page_to_pfn (pg);
+      if (kernelMPNBuffer)
+	{
+	  MPN *pmpn = VA64ToPtr (addr);
+	  *pmpn = mpn;
+	}
+      else if (HostIF_CopyToUser (addr, &mpn, sizeof mpn) != 0)
+	{
+	  __free_page (pg);
+	  err = -EFAULT;
+	  break;
+	}
       addr += sizeof mpn;
-      if (PhysTrack_Test(vmh->AWEPages, mpn)) {
-         Warning("%s: duplicate MPN %016" FMT64 "x\n", __func__, mpn);
-      }
-      PhysTrack_Add(vmh->AWEPages, mpn);
-   }
+      if (PhysTrack_Test (vmh->AWEPages, mpn))
+	{
+	  Warning ("%s: duplicate MPN %016" FMT64 "x\n", __func__, mpn);
+	}
+      PhysTrack_Add (vmh->AWEPages, mpn);
+    }
 
-   return cnt ? cnt : err;
+  return cnt ? cnt : err;
 }
 
 
@@ -841,68 +864,173 @@ HostIF_AllocLockedPages(VMDriver *vm,         // IN: VM instance pointer
  */
 
 int
-HostIF_FreeLockedPages(VMDriver *vm,         // IN: VM instance pointer
-                       VA64 addr,            // IN: array of MPNs
-                       unsigned numPages,    // IN: number of pages to free
-                       Bool kernelMPNBuffer) // IN: kernel vs user address
+HostIF_FreeLockedPages (VMDriver * vm,	// IN: VM instance pointer
+			MPN * mpns,	// IN: array of MPNs
+			PageCnt numPages)	// IN: number of pages to free
 {
-   const int MPN_BATCH = 64;
-   MPN const *pmpn = VA64ToPtr(addr);
-   VMHost *vmh = vm->vmhost;
-   unsigned int cnt;
-   struct page *pg;
-   MPN *mpns;
+  VMHost *vmh = vm->vmhost;
+  PageCnt cnt;
+  struct page *pg;
 
-   mpns = HostIF_AllocKernelMem(sizeof *mpns * MPN_BATCH, TRUE);
-
-   if (mpns == NULL) {
-      return -ENOMEM;
-   }
-   if (!vmh || !vmh->AWEPages) {
-      HostIF_FreeKernelMem(mpns);
+  if (!vmh || !vmh->AWEPages)
+    {
       return -EINVAL;
-   }
+    }
 
-   if (!kernelMPNBuffer) {
-      if (numPages > MPN_BATCH) {
-         HostIF_FreeKernelMem(mpns);
-         return -EINVAL;
-      }
+  for (cnt = 0; cnt < numPages; cnt++)
+    {
+      if (!PhysTrack_Test (vmh->AWEPages, mpns[cnt]))
+	{
+	  printk (KERN_DEBUG "Attempted to free unallocated MPN %016" FMT64
+		  "X\n", mpns[cnt]);
+	  return -EINVAL;
+	}
 
-      if (HostIF_CopyFromUser(mpns, addr, numPages * sizeof *pmpn)) {
-         printk(KERN_DEBUG "Cannot read from process address space at %p\n",
-                pmpn);
-         HostIF_FreeKernelMem(mpns);
-         return -EINVAL;
-      }
+      pg = pfn_to_page (mpns[cnt]);
+      if (page_count (pg) != 1)
+	{
+	  // should this case be considered a failure?
+	  printk (KERN_DEBUG "Page %016" FMT64 "X is still used by someone "
+		  "(use count %u, VM %p)\n", mpns[cnt], page_count (pg), vm);
+	}
+    }
 
-      pmpn = mpns;
-   }
+  for (cnt = 0; cnt < numPages; cnt++)
+    {
+      pg = pfn_to_page (mpns[cnt]);
+      PhysTrack_Remove (vmh->AWEPages, mpns[cnt]);
+      __free_page (pg);
+    }
+  return 0;
+}
 
-   for (cnt = 0; cnt < numPages; cnt++) {
-      if (!PhysTrack_Test(vmh->AWEPages, pmpn[cnt])) {
-         printk(KERN_DEBUG "Attempted to free unallocated MPN %016" FMT64 "X\n",
-                pmpn[cnt]);
-         HostIF_FreeKernelMem(mpns);
-         return -EINVAL;
-      }
 
-      pg = pfn_to_page(pmpn[cnt]);
-      if (page_count(pg) != 1) {
-         // should this case be considered a failure?
-         printk(KERN_DEBUG "Page %016" FMT64 "X is still used by someone "
-                "(use count %u, VM %p)\n", pmpn[cnt],
-                 page_count(pg), vm);
-      }
-   }
+/*
+ *----------------------------------------------------------------------
+ *
+ * HostIF_AllocLowPage --
+ *
+ *      Allocate a zeroed locked low page.
+ *
+ * Results:
+ *      Allocated MPN on success. INVALID_MPN on failure.
+ *
+ *----------------------------------------------------------------------
+ */
 
-   for (cnt = 0; cnt < numPages; cnt++) {
-      pg = pfn_to_page(pmpn[cnt]);
-      PhysTrack_Remove(vmh->AWEPages, pmpn[cnt]);
-      __free_page(pg);
-   }
-   HostIF_FreeKernelMem(mpns);
-   return 0;
+MPN
+HostIF_AllocLowPage (VMDriver * vm)	//  IN: VM instance pointer
+{
+  unsigned int gfpFlag;
+  struct page *pg;
+  MPN mpn = INVALID_MPN;
+
+#ifdef GFP_DMA32
+  gfpFlag = GFP_USER | GFP_DMA32;
+#else
+  gfpFlag = GFP_USER | GFP_DMA;
+#endif
+
+  pg = alloc_page (gfpFlag);
+
+  if (pg != NULL)
+    {
+      void *addr;
+      VMHost *vmh;
+
+      // zero page
+      addr = kmap (pg);
+      memset (addr, 0, PAGE_SIZE);
+      kunmap (pg);
+
+      mpn = (MPN) page_to_pfn (pg);
+
+      HostIF_VMLock (vm, 40);
+      vmh = vm->vmhost;
+      if (vmh->AWEPages != NULL)
+	{
+	  if (PhysTrack_Test (vmh->AWEPages, mpn))
+	    {
+	      Warning ("%s: duplicate MPN %016" FMT64 "x\n", __func__, mpn);
+	    }
+	  PhysTrack_Add (vmh->AWEPages, mpn);
+	}
+      else
+	{
+	  __free_page (pg);
+	  mpn = INVALID_MPN;
+	}
+      HostIF_VMUnlock (vm, 40);
+    }
+  return mpn;
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * HostIFFreeVMHost --
+ *
+ *      Releases the memory allocated for the host-dependent part of
+ *      the driver.
+ *
+ * Results:
+ *      None
+ *
+ * Side effects:
+ *      None
+ *
+ *----------------------------------------------------------------------
+ */
+
+static void
+HostIFFreeVMHost (VMHost * vmhost)	// IN:
+{
+  ASSERT (vmhost->lockedPages == NULL &&
+	  vmhost->AWEPages == NULL &&
+	  vmhost->crosspagePagesCount == 0 && !vmhost->hostAPICIsMapped);
+  Vmx86_Free (vmhost->crosspagePages);
+  Vmx86_Free (vmhost->vcpuSemaTask);
+  vmhost->crosspagePages = NULL;
+  vmhost->vcpuSemaTask = NULL;
+  HostIF_FreeKernelMem (vmhost);
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * HostIFAllocVMHost --
+ *
+ *      Allocate memory for the host-dependent part of the driver.
+ *
+ * Results:
+ *      Pointer to allocated structure on success, NULL on error.
+ *
+ * Side effects:
+ *      None
+ *
+ *----------------------------------------------------------------------
+ */
+
+static VMHost *
+HostIFAllocVMHost (uint32 numVCPUs)	// IN:
+{
+  VMHost *vmhost = Vmx86_Calloc (1, sizeof *vmhost, TRUE);
+  if (vmhost == NULL)
+    {
+      return NULL;
+    }
+  if ((vmhost->crosspagePages =
+       Vmx86_Calloc (numVCPUs, sizeof *vmhost->crosspagePages, TRUE)) != NULL
+      && (vmhost->vcpuSemaTask =
+	  Vmx86_Calloc (numVCPUs, sizeof *vmhost->vcpuSemaTask,
+			TRUE)) != NULL)
+    {
+      return vmhost;
+    }
+  HostIFFreeVMHost (vmhost);
+  return NULL;
 }
 
 
@@ -914,34 +1042,49 @@ HostIF_FreeLockedPages(VMDriver *vm,         // IN: VM instance pointer
  *      Initialize the host-dependent part of the driver.
  *
  * Results:
- *     zero on success, non-zero on error.
+ *      TRUE on success, FALSE on error.
  *
  * Side effects:
- *     None
+ *      None
  *
  *----------------------------------------------------------------------
  */
 
-int
-HostIF_Init(VMDriver *vm)  // IN:
+Bool
+HostIF_Init (VMDriver * vm, uint32 numVCPUs)
 {
-   vm->memtracker = MemTrack_Init(vm);
-   if (vm->memtracker == NULL) {
-      return -1;
-   }
+  vm->memtracker = MemTrack_Init (vm);
+  if (vm->memtracker == NULL)
+    {
+      return FALSE;
+    }
 
-   vm->vmhost = (VMHost *) HostIF_AllocKernelMem(sizeof *vm->vmhost, TRUE);
-   if (vm->vmhost == NULL) {
-      return -1;
-   }
-   memset(vm->vmhost, 0, sizeof *vm->vmhost);
+  vm->vmhost = HostIFAllocVMHost (numVCPUs);
+  if (vm->vmhost == NULL)
+    {
+      goto error;
+    }
 
-   if (HostIFHostMemInit(vm)) {
-      return -1;
-   }
-   MutexInit(&vm->vmhost->vmMutex, "vm");
+  if (HostIFHostMemInit (vm) != 0)
+    {
+      goto error;
+    }
+  MutexInit (&vm->vmhost->vmMutex, "vm");
 
-   return 0;
+  return TRUE;
+error:
+  if (vm->vmhost != NULL)
+    {
+      HostIFHostMemCleanup (vm);
+      HostIFFreeVMHost (vm->vmhost);
+      vm->vmhost = NULL;
+    }
+  if (vm->memtracker != NULL)
+    {
+      MemTrack_Cleanup (vm->memtracker, UnlockEntry, vm);
+      vm->memtracker = NULL;
+    }
+  return FALSE;
 }
 
 
@@ -962,65 +1105,79 @@ HostIF_Init(VMDriver *vm)  // IN:
  */
 
 int
-HostIF_LookupUserMPN(VMDriver *vm, // IN: VMDriver
-                     VA64 uAddr,   // IN: user VA of the page
-                     MPN *mpn)     // OUT
+HostIF_LookupUserMPN (VMDriver * vm,	// IN: VMDriver
+		      VA64 uAddr,	// IN: user VA of the page
+		      MPN * mpn)	// OUT
 {
-   void *uvAddr = VA64ToPtr(uAddr);
-   int retval = PAGE_LOCK_SUCCESS;
+  void *uvAddr = VA64ToPtr (uAddr);
+  int retval = PAGE_LOCK_SUCCESS;
 
-   *mpn = PgtblVa2MPN((VA)uvAddr);
+  *mpn = PgtblVa2MPN ((VA) uvAddr);
 
-   /*
-    * On failure, check whether the page is locked.
-    *
-    * While we don't require the page to be locked by HostIF_LockPage(),
-    * it does provide extra information.
-    *
-    * -- edward
-    */
-   if (*mpn == INVALID_MPN) {
-      if (vm == NULL) {
-         retval += PAGE_LOOKUP_NO_VM;
-      } else {
-         MemTrackEntry *entryPtr =
-            MemTrack_LookupVPN(vm->memtracker, PTR_2_VPN(uvAddr));
-         if (entryPtr == NULL) {
-            retval += PAGE_LOOKUP_NOT_TRACKED;
-         } else if (entryPtr->mpn == 0) {
-            retval += PAGE_LOOKUP_NO_MPN;
-         } else {
-            /*
-             * Kernel can remove PTEs/PDEs from our pagetables even if pages
-             * are locked...
-             */
-            volatile int c;
+  /*
+   * On failure, check whether the page is locked.
+   *
+   * While we don't require the page to be locked by HostIF_LockPage(),
+   * it does provide extra information.
+   *
+   * -- edward
+   */
+  if (*mpn == INVALID_MPN)
+    {
+      if (vm == NULL)
+	{
+	  retval += PAGE_LOOKUP_NO_VM;
+	}
+      else
+	{
+	  MemTrackEntry *entryPtr =
+	    MemTrack_LookupVPN (vm->memtracker, PTR_2_VPN (uvAddr));
+	  if (entryPtr == NULL)
+	    {
+	      retval += PAGE_LOOKUP_NOT_TRACKED;
+	    }
+	  else if (entryPtr->mpn == 0)
+	    {
+	      retval += PAGE_LOOKUP_NO_MPN;
+	    }
+	  else
+	    {
+	      /*
+	       * Kernel can remove PTEs/PDEs from our pagetables even if pages
+	       * are locked...
+	       */
+	      volatile int c;
 
-            get_user(c, (char *)uvAddr);
-            *mpn = PgtblVa2MPN((VA)uvAddr);
-            if (*mpn == entryPtr->mpn) {
+	      get_user (c, (char *) uvAddr);
+	      *mpn = PgtblVa2MPN ((VA) uvAddr);
+	      if (*mpn == entryPtr->mpn)
+		{
 #ifdef VMX86_DEBUG
-               printk(KERN_DEBUG "Page %p disappeared from %s(%u)... "
-                      "now back at %016" FMT64 "x\n",
-                      uvAddr, current->comm, current->pid, *mpn);
+		  printk (KERN_DEBUG "Page %p disappeared from %s(%u)... "
+			  "now back at %016" FMT64 "x\n",
+			  uvAddr, current->comm, current->pid, *mpn);
 #endif
-            } else if (*mpn != INVALID_MPN) {
-               printk(KERN_DEBUG "Page %p disappeared from %s(%u)... "
-                      "now back at %016" FMT64"x (old=%016" FMT64 "x)\n",
-                      uvAddr, current->comm, current->pid, *mpn,
-                      entryPtr->mpn);
-               *mpn = INVALID_MPN;
-            } else {
-               printk(KERN_DEBUG "Page %p disappeared from %s(%u)... "
-                      "and is lost (old=%016" FMT64 "x)\n", uvAddr, current->comm,
-                      current->pid, entryPtr->mpn);
-               *mpn = entryPtr->mpn;
-            }
-         }
-      }
-   }
+		}
+	      else if (*mpn != INVALID_MPN)
+		{
+		  printk (KERN_DEBUG "Page %p disappeared from %s(%u)... "
+			  "now back at %016" FMT64 "x (old=%016" FMT64 "x)\n",
+			  uvAddr, current->comm, current->pid, *mpn,
+			  entryPtr->mpn);
+		  *mpn = INVALID_MPN;
+		}
+	      else
+		{
+		  printk (KERN_DEBUG "Page %p disappeared from %s(%u)... "
+			  "and is lost (old=%016" FMT64 "x)\n", uvAddr,
+			  current->comm, current->pid, entryPtr->mpn);
+		  *mpn = entryPtr->mpn;
+		}
+	    }
+	}
+    }
 
-   return retval;
+  return retval;
 }
 
 
@@ -1042,15 +1199,15 @@ HostIF_LookupUserMPN(VMDriver *vm, // IN: VMDriver
  */
 
 static int
-HostIFGetUserPages(void *uvAddr,          // IN
-                   struct page **ppages,  // OUT
-                   unsigned int numPages) // IN
+HostIFGetUserPages (void *uvAddr,	// IN
+		    struct page **ppages,	// OUT
+		    unsigned int numPages)	// IN
 {
-   int retval;
+  int retval;
 
-   retval = get_user_pages_fast((unsigned long)uvAddr, numPages, 0, ppages);
+  retval = get_user_pages_fast ((unsigned long) uvAddr, numPages, 0, ppages);
 
-   return retval != numPages;
+  return retval != numPages;
 }
 
 
@@ -1072,10 +1229,10 @@ HostIFGetUserPages(void *uvAddr,          // IN
  */
 
 Bool
-HostIF_IsLockedByMPN(VMDriver *vm,  // IN:
-                     MPN mpn)       // IN:
+HostIF_IsLockedByMPN (VMDriver * vm,	// IN:
+		      MPN mpn)	// IN:
 {
-  return PhysTrack_Test(vm->vmhost->lockedPages, mpn);
+  return PhysTrack_Test (vm->vmhost->lockedPages, mpn);
 }
 
 
@@ -1097,65 +1254,69 @@ HostIF_IsLockedByMPN(VMDriver *vm,  // IN:
  */
 
 int
-HostIF_LockPage(VMDriver *vm,                // IN: VMDriver
-                VA64 uAddr,                  // IN: user VA of the page
-                Bool allowMultipleMPNsPerVA, // IN: allow to lock many pages per VA
-                MPN *mpn)                    // OUT: pinned page
+HostIF_LockPage (VMDriver * vm,	// IN: VMDriver
+		 VA64 uAddr,	// IN: user VA of the page
+		 Bool allowMultipleMPNsPerVA,	// IN: allow to lock many pages per VA
+		 MPN * mpn)	// OUT: pinned page
 {
-   void *uvAddr = VA64ToPtr(uAddr);
-   struct page *page;
-   VPN vpn;
-   MemTrackEntry *entryPtr = NULL;
+  void *uvAddr = VA64ToPtr (uAddr);
+  struct page *page;
+  VPN vpn;
+  MemTrackEntry *entryPtr = NULL;
 
-   vpn = PTR_2_VPN(uvAddr);
-   if (!allowMultipleMPNsPerVA) {
-      entryPtr = MemTrack_LookupVPN(vm->memtracker, vpn);
+  vpn = PTR_2_VPN (uvAddr);
+  if (!allowMultipleMPNsPerVA)
+    {
+      entryPtr = MemTrack_LookupVPN (vm->memtracker, vpn);
+      /* Already tracked and locked */
+      if (entryPtr != NULL && entryPtr->mpn != 0)
+	{
+	  return PAGE_LOCK_ALREADY_LOCKED;
+	}
+    }
 
-      /*
-       * Already tracked and locked
-       */
-
-      if (entryPtr != NULL && entryPtr->mpn != 0) {
-         return PAGE_LOCK_ALREADY_LOCKED;
-      }
-   }
-
-   if (HostIFGetUserPages(uvAddr, &page, 1)) {
+  if (HostIFGetUserPages (uvAddr, &page, 1))
+    {
       return PAGE_LOCK_FAILED;
-   }
+    }
 
-   *mpn = (MPN)page_to_pfn(page);
+  *mpn = (MPN) page_to_pfn (page);
 
-   if (allowMultipleMPNsPerVA) {
-      /*
-       *  Add the MPN to the PhysTracker that tracks locked pages.
-       */
+  if (allowMultipleMPNsPerVA)
+    {
+      /* Add the MPN to the PhysTracker that tracks locked pages */
+      struct PhysTracker *const pt = vm->vmhost->lockedPages;
 
-      struct PhysTracker* const pt = vm->vmhost->lockedPages;
-
-      if (PhysTrack_Test(pt, *mpn)) {
-         put_page(page);
-         return PAGE_LOCK_ALREADY_LOCKED;
-      }
-      PhysTrack_Add(pt, *mpn);
-   } else {
+      if (PhysTrack_Test (pt, *mpn))
+	{
+	  put_page (page);
+	  return PAGE_LOCK_ALREADY_LOCKED;
+	}
+      PhysTrack_Add (pt, *mpn);
+    }
+  else
+    {
       /*
        * If the entry doesn't exist, add it to the memtracker
        * otherwise we just update the mpn.
        */
 
-      if (entryPtr == NULL) {
-         entryPtr = MemTrack_Add(vm->memtracker, vpn, *mpn);
-         if (entryPtr == NULL) {
-            HOST_UNLOCK_PFN(vm, *mpn);
-            return PAGE_LOCK_MEMTRACKER_ERROR;
-         }
-      } else {
-         entryPtr->mpn = *mpn;
-      }
-   }
+      if (entryPtr == NULL)
+	{
+	  entryPtr = MemTrack_Add (vm->memtracker, vpn, *mpn);
+	  if (entryPtr == NULL)
+	    {
+	      HOST_UNLOCK_PFN (vm, *mpn);
+	      return PAGE_LOCK_MEMTRACKER_ERROR;
+	    }
+	}
+      else
+	{
+	  entryPtr->mpn = *mpn;
+	}
+    }
 
-   return PAGE_LOCK_SUCCESS;
+  return PAGE_LOCK_SUCCESS;
 }
 
 
@@ -1176,27 +1337,29 @@ HostIF_LockPage(VMDriver *vm,                // IN: VMDriver
  */
 
 int
-HostIF_UnlockPage(VMDriver *vm,  // IN:
-                  VA64 uAddr)    // IN:
+HostIF_UnlockPage (VMDriver * vm,	// IN:
+		   VA64 uAddr)	// IN:
 {
-   void *addr = VA64ToPtr(uAddr);
-   VPN vpn;
-   MemTrackEntry *e;
+  void *addr = VA64ToPtr (uAddr);
+  VPN vpn;
+  MemTrackEntry *e;
 
-   vpn = VA_2_VPN((VA)addr);
-   e = MemTrack_LookupVPN(vm->memtracker, vpn);
+  vpn = VA_2_VPN ((VA) addr);
+  e = MemTrack_LookupVPN (vm->memtracker, vpn);
 
-   if (e == NULL) {
+  if (e == NULL)
+    {
       return PAGE_UNLOCK_NOT_TRACKED;
-   }
-   if (e->mpn == 0) {
+    }
+  if (e->mpn == 0)
+    {
       return PAGE_UNLOCK_NO_MPN;
-   }
+    }
 
-   HOST_UNLOCK_PFN(vm, e->mpn);
-   e->mpn = 0;
+  HOST_UNLOCK_PFN (vm, e->mpn);
+  e->mpn = 0;
 
-   return PAGE_UNLOCK_SUCCESS;
+  return PAGE_UNLOCK_SUCCESS;
 }
 
 
@@ -1219,67 +1382,72 @@ HostIF_UnlockPage(VMDriver *vm,  // IN:
  */
 
 int
-HostIF_UnlockPageByMPN(VMDriver *vm, // IN: VMDriver
-                       MPN mpn,      // IN: the MPN to unlock
-                       VA64 uAddr)   // IN: optional(debugging) VA for the MPN
+HostIF_UnlockPageByMPN (VMDriver * vm,	// IN: VMDriver
+			MPN mpn,	// IN: the MPN to unlock
+			VA64 uAddr)	// IN: optional(debugging) VA for the MPN
 {
-   if (!PhysTrack_Test(vm->vmhost->lockedPages, mpn)) {
+  if (!PhysTrack_Test (vm->vmhost->lockedPages, mpn))
+    {
       return PAGE_UNLOCK_NO_MPN;
-   }
+    }
 
 #ifdef VMX86_DEBUG
-   {
-      void *va = VA64ToPtr(uAddr);
-      MemTrackEntry *e;
+  {
+    void *va = VA64ToPtr (uAddr);
+    MemTrackEntry *e;
 
-      /*
-       * Verify for debugging that VA and MPN make sense.
-       * PgtblVa2MPN() can fail under high memory pressure.
-       */
+    /*
+     * Verify for debugging that VA and MPN make sense.
+     * PgtblVa2MPN() can fail under high memory pressure.
+     */
 
-      if (va != NULL) {
-         MPN lookupMpn = PgtblVa2MPN((VA)va);
+    if (va != NULL)
+      {
+	MPN lookupMpn = PgtblVa2MPN ((VA) va);
 
-         if (lookupMpn != INVALID_MPN && mpn != lookupMpn) {
-            Warning("Page lookup fail %#"FMT64"x %016" FMT64 "x %p\n",
-                    mpn, lookupMpn, va);
+	if (lookupMpn != INVALID_MPN && mpn != lookupMpn)
+	  {
+	    Warning ("Page lookup fail %#" FMT64 "x %016" FMT64 "x %p\n",
+		     mpn, lookupMpn, va);
 
-            return PAGE_LOOKUP_INVALID_ADDR;
-         }
+	    return PAGE_LOOKUP_INVALID_ADDR;
+	  }
       }
 
-      /*
-       * Verify that this MPN was locked with
-       * HostIF_LockPage(allowMultipleMPNsPerVA = TRUE).
-       * That means that this MPN should not be in the MemTracker.
-       */
+    /*
+     * Verify that this MPN was locked with
+     * HostIF_LockPage(allowMultipleMPNsPerVA = TRUE).
+     * That means that this MPN should not be in the MemTracker.
+     */
 
-      e = MemTrack_LookupMPN(vm->memtracker, mpn);
-      if (e) {
-         Warning("%s(): mpn=%#"FMT64"x va=%p was permanently locked with "
-                 "vpn=0x%"FMT64"x\n", __func__, mpn, va, e->vpn);
+    e = MemTrack_LookupMPN (vm->memtracker, mpn);
+    if (e)
+      {
+	Warning ("%s(): mpn=%#" FMT64 "x va=%p was permanently locked with "
+		 "vpn=0x%" FMT64 "x\n", __func__, mpn, va, e->vpn);
 
-         return PAGE_UNLOCK_MISMATCHED_TYPE;
+	return PAGE_UNLOCK_MISMATCHED_TYPE;
       }
-   }
+  }
 #endif
 
-   HOST_UNLOCK_PFN_BYMPN(vm, mpn);
+  HOST_UNLOCK_PFN_BYMPN (vm, mpn);
 
-   return PAGE_UNLOCK_SUCCESS;
+  return PAGE_UNLOCK_SUCCESS;
 }
 
 
 static void
-UnlockEntry(void *clientData,         // IN:
-            MemTrackEntry *entryPtr)  // IN:
+UnlockEntry (void *clientData,	// IN:
+	     MemTrackEntry * entryPtr)	// IN:
 {
-   VMDriver *vm = (VMDriver *)clientData;
+  VMDriver *vm = (VMDriver *) clientData;
 
-   if (entryPtr->mpn) {
-      HOST_UNLOCK_PFN(vm,entryPtr->mpn);
+  if (entryPtr->mpn)
+    {
+      HOST_UNLOCK_PFN (vm, entryPtr->mpn);
       entryPtr->mpn = 0;
-   }
+    }
 }
 
 
@@ -1300,30 +1468,35 @@ UnlockEntry(void *clientData,         // IN:
  */
 
 void
-HostIF_FreeAllResources(VMDriver *vm) // IN
+HostIF_FreeAllResources (VMDriver * vm)	// IN
 {
-   unsigned int cnt;
+  unsigned int cnt;
 
-   HostIFHostMemCleanup(vm);
-   if (vm->memtracker) {
-      MemTrack_Cleanup(vm->memtracker, UnlockEntry, vm);
+  HostIFHostMemCleanup (vm);
+  if (vm->memtracker)
+    {
+      MemTrack_Cleanup (vm->memtracker, UnlockEntry, vm);
       vm->memtracker = NULL;
-   }
-   if (vm->vmhost) {
-      for (cnt = vm->vmhost->crosspagePagesCount; cnt > 0; ) {
-         struct page* p = vm->vmhost->crosspagePages[--cnt];
-         UnmapCrossPage(p, vm->crosspage[cnt]);
-      }
+    }
+  if (vm->vmhost)
+    {
+      ASSERT (vm->vmhost->crosspagePagesCount <= vm->numVCPUs);
+      for (cnt = vm->vmhost->crosspagePagesCount; cnt > 0;)
+	{
+	  struct page *p = vm->vmhost->crosspagePages[--cnt];
+	  UnmapCrossPage (p, vm->crosspage[cnt]);
+	}
       vm->vmhost->crosspagePagesCount = 0;
-      if (vm->vmhost->hostAPICIsMapped) {
-         ASSERT(vm->hostAPIC.base != NULL);
-         iounmap((void*)vm->hostAPIC.base);
-         vm->hostAPIC.base = NULL;
-         vm->vmhost->hostAPICIsMapped = FALSE;
-      }
-      HostIF_FreeKernelMem(vm->vmhost);
+      if (vm->vmhost->hostAPICIsMapped)
+	{
+	  ASSERT (vm->hostAPIC.base != NULL);
+	  iounmap ((void *) vm->hostAPIC.base);
+	  vm->hostAPIC.base = NULL;
+	  vm->vmhost->hostAPICIsMapped = FALSE;
+	}
+      HostIFFreeVMHost (vm->vmhost);
       vm->vmhost = NULL;
-   }
+    }
 }
 
 
@@ -1345,16 +1518,17 @@ HostIF_FreeAllResources(VMDriver *vm) // IN
  */
 
 void *
-HostIF_AllocKernelMem(size_t size,  // IN:
-                      int wired)    // IN:
+HostIF_AllocKernelMem (size_t size,	// IN:
+		       Bool wired)	// IN:
 {
-   void * ptr = kmalloc(size, GFP_KERNEL);
+  void *ptr = kmalloc (size, GFP_KERNEL);
 
-   if (ptr == NULL) {
-      Warning("%s failed (size=%p)\n", __func__, (void*)size);
-   }
+  if (ptr == NULL)
+    {
+      Warning ("%s failed (size=%p)\n", __func__, (void *) size);
+    }
 
-   return ptr;
+  return ptr;
 }
 
 
@@ -1375,16 +1549,17 @@ HostIF_AllocKernelMem(size_t size,  // IN:
  */
 
 void *
-HostIF_AllocPage(void)
+HostIF_AllocPage (void)
 {
-   VA kvAddr;
+  VA kvAddr;
 
-   kvAddr = __get_free_page(GFP_KERNEL);
-   if (kvAddr == 0) {
-      Warning("%s: __get_free_page() failed\n", __func__);
-   }
+  kvAddr = __get_free_page (GFP_KERNEL);
+  if (kvAddr == 0)
+    {
+      Warning ("%s: __get_free_page() failed\n", __func__);
+    }
 
-   return (void *)kvAddr;
+  return (void *) kvAddr;
 }
 
 
@@ -1404,22 +1579,25 @@ HostIF_AllocPage(void)
  */
 
 void
-HostIF_FreeKernelMem(void *ptr)  // IN:
+HostIF_FreeKernelMem (void *ptr)	// IN:
 {
-   kfree(ptr);
+  kfree (ptr);
 }
 
 
 void
-HostIF_FreePage(void *ptr)  // IN:
+HostIF_FreePage (void *ptr)	// IN:
 {
-   VA vAddr = (VA)ptr;
+  VA vAddr = (VA) ptr;
 
-   if (vAddr & (PAGE_SIZE-1)) {
-      Warning("%s %p misaligned\n", __func__, (void*)vAddr);
-   } else {
-      free_page(vAddr);
-   }
+  if (vAddr & (PAGE_SIZE - 1))
+    {
+      Warning ("%s %p misaligned\n", __func__, (void *) vAddr);
+    }
+  else
+    {
+      free_page (vAddr);
+    }
 }
 
 
@@ -1442,11 +1620,11 @@ HostIF_FreePage(void *ptr)  // IN:
  */
 
 VPN
-HostIF_MapPage(MPN mpn) // IN:
+HostIF_MapPage (MPN mpn)	// IN:
 {
-   struct page *p = pfn_to_page(mpn);
-   void *mappedAddr = vmap(&p, 1, VM_MAP, PAGE_KERNEL);
-   return mappedAddr == NULL ? 0 : VA_2_VPN((VA)mappedAddr);
+  struct page *p = pfn_to_page (mpn);
+  void *mappedAddr = vmap (&p, 1, VM_MAP, PAGE_KERNEL);
+  return mappedAddr == NULL ? 0 : VA_2_VPN ((VA) mappedAddr);
 }
 
 
@@ -1467,9 +1645,9 @@ HostIF_MapPage(MPN mpn) // IN:
  */
 
 void
-HostIF_UnmapPage(VPN vpn) // IN:
+HostIF_UnmapPage (VPN vpn)	// IN:
 {
-   vunmap((void *)VPN_2_VA(vpn));
+  vunmap ((void *) VPN_2_VA (vpn));
 }
 
 
@@ -1490,53 +1668,73 @@ HostIF_UnmapPage(VPN vpn) // IN:
  *----------------------------------------------------------------------
  */
 
-unsigned int
-HostIF_EstimateLockedPageLimit(const VMDriver* vm,                // IN
-                               unsigned int currentlyLockedPages) // IN
+PageCnt
+HostIF_EstimateLockedPageLimit (const VMDriver * vm,	// IN
+				PageCnt currentlyLockedPages)	// IN
 {
-   /*
-    * This variable is available and exported to modules,
-    * since at least 2.6.0.
-    */
+  /*
+   * This variable is available and exported to modules,
+   * since at least 2.6.0.
+   */
 
-   extern unsigned long totalram_pages;
-
-   unsigned int totalPhysicalPages = totalram_pages;
-
-   /*
-    * Use the memory information linux exports as of late for a more
-    * precise estimate of locked memory.  All kernel page-related structures
-    * (slab, pagetable) are as good as locked.  Unevictable includes things
-    * that are explicitly marked as such (like mlock()).  Huge pages are
-    * also as good as locked, since we don't use them.  Lastly, without
-    * available swap, anonymous pages become locked in memory as well.
-    */
-
-   unsigned int forHost;
-   unsigned int reservedPages = MEMDEFAULTS_MIN_HOST_PAGES;
-   unsigned int hugePages = (vm == NULL) ? 0 :
-      BYTES_2_PAGES(vm->memInfo.hugePageBytes);
-   unsigned int lockedPages = global_zone_page_state(NR_PAGETABLE) +
-                              global_zone_page_state(NR_SLAB_UNRECLAIMABLE) +
-                              global_zone_page_state(NR_UNEVICTABLE) +
-                              hugePages + reservedPages;
-   unsigned int anonPages =
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0)
-      global_zone_page_state(NR_ANON_MAPPED);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+  extern unsigned long totalram_pages;
+  PageCnt totalPhysicalPages = totalram_pages;
 #else
-      global_zone_page_state(NR_ANON_PAGES);
+  PageCnt totalPhysicalPages = totalram_pages ();
 #endif
-   unsigned int swapPages = BYTES_2_PAGES(linuxState.swapSize);
+  /*
+   * Use the memory information linux exports as of late for a more
+   * precise estimate of locked memory.  All kernel page-related structures
+   * (slab, pagetable) are as good as locked.  Unevictable includes things
+   * that are explicitly marked as such (like mlock()).  Huge pages are
+   * also as good as locked, since we don't use them.  Lastly, without
+   * available swap, anonymous pages become locked in memory as well.
+   */
+  PageCnt forHost;
+  PageCnt reservedPages = MEMDEFAULTS_MIN_HOST_PAGES;
+  PageCnt hugePages = (vm == NULL) ? 0
+    : BYTES_2_PAGES (vm->memInfo.hugePageBytes);
+  PageCnt lockedPages = hugePages + reservedPages;
+  PageCnt anonPages;
+  PageCnt swapPages = BYTES_2_PAGES (linuxState.swapSize);
 
-   if (anonPages > swapPages) {
+  /* global_page_state is global_zone_page_state in 4.14. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+  lockedPages += global_zone_page_state (NR_PAGETABLE);
+#else
+  lockedPages += global_page_state (NR_PAGETABLE);
+#endif
+  /* NR_SLAB_* moved from zone to node in 4.13. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
+  lockedPages += global_node_page_state (NR_SLAB_UNRECLAIMABLE);
+#else
+  lockedPages += global_page_state (NR_SLAB_UNRECLAIMABLE);
+#endif
+  /* NR_UNEVICTABLE moved from global to node in 4.8. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0)
+  lockedPages += global_node_page_state (NR_UNEVICTABLE);
+#else
+  lockedPages += global_page_state (NR_UNEVICTABLE);
+#endif
+  /* NR_ANON_MAPPED moved & changed name in 4.8. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0)
+  anonPages = global_node_page_state (NR_ANON_MAPPED);
+#else
+  anonPages = global_page_state (NR_ANON_PAGES);
+#endif
+
+  if (anonPages > swapPages)
+    {
       lockedPages += anonPages - swapPages;
-   }
-   forHost = lockedPages + LOCKED_PAGE_SLACK;
-   if (forHost > totalPhysicalPages) {
+    }
+  forHost = lockedPages + LOCKED_PAGE_SLACK;
+  if (forHost > totalPhysicalPages)
+    {
       forHost = totalPhysicalPages;
-   }
+    }
 
-   return totalPhysicalPages - forHost;
+  return totalPhysicalPages - forHost;
 }
 
 
@@ -1551,9 +1749,9 @@ HostIF_EstimateLockedPageLimit(const VMDriver* vm,                // IN
  */
 
 void
-HostIF_Wait(unsigned int timeoutMs)
+HostIF_Wait (unsigned int timeoutMs)
 {
-   msleep_interruptible(timeoutMs);
+  msleep_interruptible (timeoutMs);
 }
 
 
@@ -1574,11 +1772,54 @@ HostIF_Wait(unsigned int timeoutMs)
  */
 
 void
-HostIF_WaitForFreePages(unsigned int timeoutMs)  // IN:
+HostIF_WaitForFreePages (unsigned int timeoutMs)	// IN:
 {
-   static unsigned count;
-   msleep_interruptible(timeoutMs);
-   count++;
+  static unsigned count;
+  msleep_interruptible (timeoutMs);
+  count++;
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * HostIFGetTime --
+ *
+ *      Reads the current time in UPTIME_FREQ units.
+ *
+ * Results:
+ *      The uptime, in units of UPTIME_FREQ.
+ *
+ * Side effects:
+ *      None.
+ *
+ *----------------------------------------------------------------------
+ */
+
+static uint64
+HostIFGetTime (void)
+{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+  struct timeval tv;
+
+  do_gettimeofday (&tv);
+  return tv.tv_usec * (UPTIME_FREQ / 1000000) + tv.tv_sec * UPTIME_FREQ;
+#else
+  struct timespec64 now;
+
+  /*
+   * Use raw time used by Posix timers.  This time is not affected by
+   * NTP adjustments, so it may drift from real time and monotonic time,
+   * but it will stay in sync with other timers.
+   */
+  ktime_get_raw_ts64 (&now);
+  /*
+   * UPTIME_FREQ resolution is lower than tv_nsec,
+   * so we have to do division...
+   */
+  ASSERT_ON_COMPILE (1000000000 % UPTIME_FREQ == 0);
+  return now.tv_nsec / (1000000000 / UPTIME_FREQ) + now.tv_sec * UPTIME_FREQ;
+#endif
 }
 
 
@@ -1611,61 +1852,60 @@ HostIF_WaitForFreePages(unsigned int timeoutMs)  // IN:
  */
 
 static uint64
-HostIFReadUptimeWork(unsigned long *j)  // OUT: current jiffies
+HostIFReadUptimeWork (unsigned long *j)	// OUT: current jiffies
 {
-   struct timeval tv;
-   uint64 monotime, uptime, upBase, monoBase;
-   int64 diff;
-   uint32 version;
-   unsigned long jifs, jifBase;
-   unsigned int attempts = 0;
+  uint64 monotime, uptime, upBase, monoBase;
+  int64 diff;
+  uint32 version;
+  unsigned long jifs, jifBase;
+  unsigned int attempts = 0;
 
-   /* Assert that HostIF_InitUptime has been called. */
-   ASSERT(uptimeState.timer.function);
-
- retry:
-   do {
-      version  = VersionedAtomic_BeginTryRead(&uptimeState.version);
-      jifs     = jiffies;
-      jifBase  = uptimeState.jiffiesBase;
+retry:
+  do
+    {
+      version = VersionedAtomic_BeginTryRead (&uptimeState.version);
+      jifs = jiffies;
+      jifBase = uptimeState.jiffiesBase;
       monoBase = uptimeState.monotimeBase;
-   } while (!VersionedAtomic_EndTryRead(&uptimeState.version, version));
+    }
+  while (!VersionedAtomic_EndTryRead (&uptimeState.version, version));
 
-   do_gettimeofday(&tv);
-   upBase = Atomic_Read64(&uptimeState.uptimeBase);
+  uptime = HostIFGetTime ();
+  upBase = Atomic_Read64 (&uptimeState.uptimeBase);
 
-   monotime = (uint64)(jifs - jifBase) * (UPTIME_FREQ / HZ);
-   monotime += monoBase;
+  monotime = (uint64) (jifs - jifBase) * (UPTIME_FREQ / HZ);
+  monotime += monoBase;
 
-   uptime = tv.tv_usec * (UPTIME_FREQ / 1000000) + tv.tv_sec * UPTIME_FREQ;
-   uptime += upBase;
+  uptime += upBase;
 
-   /*
-    * Use the jiffies based monotonic time to sanity check gettimeofday.
-    * If they differ by more than one second, assume the time of day has
-    * been warped, and use the jiffies time to undo (most of) the warp.
-    */
+  /*
+   * Use the jiffies based monotonic time to sanity check gettimeofday.
+   * If they differ by more than one second, assume the time of day has
+   * been warped, and use the jiffies time to undo (most of) the warp.
+   */
 
-   diff = uptime - monotime;
-   if (UNLIKELY(diff < -UPTIME_FREQ || diff > UPTIME_FREQ)) {
+  diff = uptime - monotime;
+  if (UNLIKELY (diff < -UPTIME_FREQ || diff > UPTIME_FREQ))
+    {
       /* Compute a new uptimeBase to get uptime back on track. */
       uint64 newUpBase = monotime - (uptime - upBase);
 
       attempts++;
-      if (!Atomic_CMPXCHG64(&uptimeState.uptimeBase, upBase, newUpBase) &&
-          attempts < 5) {
-         /* Another thread updated uptimeBase.  Recalculate uptime. */
-         goto retry;
-      }
+      if (!Atomic_CMPXCHG64 (&uptimeState.uptimeBase, upBase, newUpBase) &&
+	  attempts < 5)
+	{
+	  /* Another thread updated uptimeBase.  Recalculate uptime. */
+	  goto retry;
+	}
       uptime = monotime;
 
-      Log("%s: detected settimeofday: fixed uptimeBase old %"FMT64"u "
-          "new %"FMT64"u attempts %u\n", __func__,
-          upBase, newUpBase, attempts);
-   }
-   *j = jifs;
+      Log ("%s: detected settimeofday: fixed uptimeBase old %" FMT64 "u "
+	   "new %" FMT64 "u attempts %u\n", __func__,
+	   upBase, newUpBase, attempts);
+    }
+  *j = jifs;
 
-   return uptime;
+  return uptime;
 }
 
 
@@ -1688,37 +1928,37 @@ HostIFReadUptimeWork(unsigned long *j)  // OUT: current jiffies
  */
 
 static void
-HostIFUptimeResyncMono(unsigned long data)  // IN: ignored
+HostIFUptimeResyncMono (struct timer_list *timer)	// IN: ignored
 {
-   unsigned long jifs;
-   uintptr_t flags;
+  unsigned long jifs;
+  uintptr_t flags;
 
-   /*
-    * Read the uptime and the corresponding jiffies value.  This will
-    * also correct the uptime (which is based on time of day) if needed
-    * before we rebase monotonic time (which is based on jiffies).
-    */
+  /*
+   * Read the uptime and the corresponding jiffies value.  This will
+   * also correct the uptime (which is based on time of day) if needed
+   * before we rebase monotonic time (which is based on jiffies).
+   */
 
-   uint64 uptime = HostIFReadUptimeWork(&jifs);
+  uint64 uptime = HostIFReadUptimeWork (&jifs);
 
-   /*
-    * Every second, recalculate monoBase and jiffiesBase to squash small
-    * drift between gettimeofday and jiffies.  Also, this prevents
-    * (jiffies - jiffiesBase) wrap on 32-bits.
-    */
+  /*
+   * Every second, recalculate monoBase and jiffiesBase to squash small
+   * drift between gettimeofday and jiffies.  Also, this prevents
+   * (jiffies - jiffiesBase) wrap on 32-bits.
+   */
 
-   SAVE_FLAGS(flags);
-   CLEAR_INTERRUPTS();
-   VersionedAtomic_BeginWrite(&uptimeState.version);
+  SAVE_FLAGS (flags);
+  CLEAR_INTERRUPTS ();
+  VersionedAtomic_BeginWrite (&uptimeState.version);
 
-   uptimeState.monotimeBase = uptime;
-   uptimeState.jiffiesBase  = jifs;
+  uptimeState.monotimeBase = uptime;
+  uptimeState.jiffiesBase = jifs;
 
-   VersionedAtomic_EndWrite(&uptimeState.version);
-   RESTORE_FLAGS(flags);
+  VersionedAtomic_EndWrite (&uptimeState.version);
+  RESTORE_FLAGS (flags);
 
-   /* Reschedule this timer to expire in one second. */
-   mod_timer(&uptimeState.timer, jifs + HZ);
+  /* Reschedule this timer to expire in one second. */
+  mod_timer (&uptimeState.timer, jifs + HZ);
 }
 
 
@@ -1740,19 +1980,22 @@ HostIFUptimeResyncMono(unsigned long data)  // IN: ignored
  */
 
 void
-HostIF_InitUptime(void)
+HostIF_InitUptime (void)
 {
-   struct timeval tv;
+  uint64 tm;
 
-   uptimeState.jiffiesBase = jiffies;
-   do_gettimeofday(&tv);
-   Atomic_Write64(&uptimeState.uptimeBase,
-                  -(tv.tv_usec * (UPTIME_FREQ / 1000000) +
-                    tv.tv_sec * UPTIME_FREQ));
+  uptimeState.jiffiesBase = jiffies;
+  tm = HostIFGetTime ();
+  Atomic_Write64 (&uptimeState.uptimeBase, -tm);
 
-   init_timer(&uptimeState.timer);
-   uptimeState.timer.function = HostIFUptimeResyncMono;
-   mod_timer(&uptimeState.timer, jiffies + HZ);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0) && !defined(timer_setup)
+  init_timer (&uptimeState.timer);
+  uptimeState.timer.function = (void *) HostIFUptimeResyncMono;
+  uptimeState.timer.data = (unsigned long) &uptimeState.timer;
+#else
+  timer_setup (&uptimeState.timer, HostIFUptimeResyncMono, 0);
+#endif
+  mod_timer (&uptimeState.timer, jiffies + HZ);
 }
 
 
@@ -1773,9 +2016,9 @@ HostIF_InitUptime(void)
  */
 
 void
-HostIF_CleanupUptime(void)
+HostIF_CleanupUptime (void)
 {
-   del_timer_sync(&uptimeState.timer);
+  del_timer_sync (&uptimeState.timer);
 }
 
 
@@ -1797,11 +2040,11 @@ HostIF_CleanupUptime(void)
  */
 
 uint64
-HostIF_ReadUptime(void)
+HostIF_ReadUptime (void)
 {
-   unsigned long jifs;
+  unsigned long jifs;
 
-   return HostIFReadUptimeWork(&jifs);
+  return HostIFReadUptimeWork (&jifs);
 }
 
 
@@ -1822,9 +2065,9 @@ HostIF_ReadUptime(void)
  */
 
 uint64
-HostIF_UptimeFrequency(void)
+HostIF_UptimeFrequency (void)
 {
-   return UPTIME_FREQ;
+  return UPTIME_FREQ;
 }
 
 
@@ -1848,11 +2091,11 @@ HostIF_UptimeFrequency(void)
  */
 
 int
-HostIF_CopyFromUser(void *dst,      // OUT
-                    VA64 src,       // IN
-                    size_t len)     // IN
+HostIF_CopyFromUser (void *dst,	// OUT
+		     VA64 src,	// IN
+		     size_t len)	// IN
 {
-   return copy_from_user(dst, VA64ToPtr(src), len) ? -EFAULT : 0;
+  return copy_from_user (dst, VA64ToPtr (src), len) ? -EFAULT : 0;
 }
 
 
@@ -1876,11 +2119,11 @@ HostIF_CopyFromUser(void *dst,      // OUT
  */
 
 int
-HostIF_CopyToUser(VA64 dst,         // OUT
-                  const void *src,  // IN
-                  size_t len)       // IN
+HostIF_CopyToUser (VA64 dst,	// OUT
+		   const void *src,	// IN
+		   size_t len)	// IN
 {
-   return copy_to_user(VA64ToPtr(dst), src, len) ? -EFAULT : 0;
+  return copy_to_user (VA64ToPtr (dst), src, len) ? -EFAULT : 0;
 }
 
 
@@ -1889,15 +2132,10 @@ HostIF_CopyToUser(VA64 dst,         // OUT
  *
  * HostIF_MapCrossPage --
  *
- *    Obtain kernel pointer to crosspage.
- *
- *    We must return a VA that is obtained through a kernel mapping, so that
- *    the mapping never goes away (see bug 29753).
- *
- *    However, the LA corresponding to that VA must not overlap with the
- *    monitor (see bug 32922). The userland code ensures that by only
- *    allocating cross pages from low memory. For those pages, the kernel
- *    uses a permanent mapping, instead of a temporary one with a high LA.
+ *    Map the cross page in the kernel address space given a user VA.  The
+ *    kernel mapping must not overlap the monitor's 64MB VA space (bug 32922).
+ *    In practice, the host kernel does not return mappings in that range.
+ *    This is checked in TaskCreatePTPatch() which gracefully fails if it must.
  *
  * Results:
  *    The kernel virtual address on success
@@ -1910,31 +2148,33 @@ HostIF_CopyToUser(VA64 dst,         // OUT
  */
 
 void *
-HostIF_MapCrossPage(VMDriver *vm, // IN
-                    VA64 uAddr)   // IN
+HostIF_MapCrossPage (VMDriver * vm,	// IN
+		     VA64 uAddr)	// IN
 {
-   void *p = VA64ToPtr(uAddr);
-   struct page *page;
-   VA           vPgAddr;
-   VA           ret;
+  void *p = VA64ToPtr (uAddr);
+  struct page *page;
+  VA vPgAddr;
+  VA ret;
 
-   if (HostIFGetUserPages(p, &page, 1)) {
+  if (HostIFGetUserPages (p, &page, 1))
+    {
       return NULL;
-   }
-   vPgAddr = (VA) MapCrossPage(page);
-   HostIF_VMLock(vm, 27);
-   if (vm->vmhost->crosspagePagesCount >= MAX_INITBLOCK_CPUS) {
-      HostIF_VMUnlock(vm, 27);
-      UnmapCrossPage(page, (void*)vPgAddr);
+    }
+  vPgAddr = (VA) MapCrossPage (page);
+  HostIF_VMLock (vm, 27);
+  if (vm->vmhost->crosspagePagesCount >= vm->numVCPUs)
+    {
+      HostIF_VMUnlock (vm, 27);
+      UnmapCrossPage (page, (void *) vPgAddr);
 
       return NULL;
-   }
-   vm->vmhost->crosspagePages[vm->vmhost->crosspagePagesCount++] = page;
-   HostIF_VMUnlock(vm, 27);
+    }
+  vm->vmhost->crosspagePages[vm->vmhost->crosspagePagesCount++] = page;
+  HostIF_VMUnlock (vm, 27);
 
-   ret = vPgAddr | (((VA)p) & (PAGE_SIZE - 1));
+  ret = vPgAddr | (((VA) p) & (PAGE_SIZE - 1));
 
-   return (void*)ret;
+  return (void *) ret;
 }
 
 
@@ -1943,7 +2183,8 @@ HostIF_MapCrossPage(VMDriver *vm, // IN
  *
  * HostIF_AllocKernelPages --
  *
- *      Allocates and maps a set of locked pages.
+ *      Allocates and maps a set of locked pages. The pages might not
+ *      be physically contiguous.
  *
  * Results:
  *      On success: Host kernel virtual address of the first page.
@@ -1959,31 +2200,22 @@ HostIF_MapCrossPage(VMDriver *vm, // IN
  */
 
 void *
-HostIF_AllocKernelPages(unsigned numPages, // IN: Number of pages
-                        MPN     *mpns)     // OUT: Array of MPNs
+HostIF_AllocKernelPages (PageCnt numPages,	// IN: Number of pages
+			 MPN * mpns)	// OUT: Array of MPNs
 {
-   MPN startMPN;
-   struct page *pages;
-   unsigned i;
-   void *ptr;
+  PageCnt i;
+  void *ptr = vmalloc (numPages * PAGE_SIZE);
 
-   for (i = 0; (1 << i) < numPages; i++) { }
-   /* Allocates physically contiguous pages. */
-   pages = alloc_pages(GFP_KERNEL, i);
-
-   if (pages == NULL) {
+  if (ptr == NULL)
+    {
       return NULL;
-   }
-
-   startMPN = page_to_pfn(pages);
-
-   for (i = 0; i < numPages; i++) {
-      mpns[i] = startMPN + i;
-   }
-   ptr = (void *)page_address(pages);
-   ASSERT(!(PtrToVA64(ptr) & (PAGE_SIZE - 1))); /* Page-aligned */
-
-   return ptr;
+    }
+  ASSERT ((PtrToVA64 (ptr) & (PAGE_SIZE - 1)) == 0);
+  for (i = 0; i < numPages; i++)
+    {
+      mpns[i] = vmalloc_to_pfn ((uint8 *) ptr + i * PAGE_SIZE);
+    }
+  return ptr;
 }
 
 
@@ -2004,13 +2236,10 @@ HostIF_AllocKernelPages(unsigned numPages, // IN: Number of pages
  */
 
 void
-HostIF_FreeKernelPages(unsigned numPages, // IN: Number of pages
-                       void    *ptr)      // IN: Kernel VA of first page
+HostIF_FreeKernelPages (PageCnt numPages,	// IN: Number of pages
+			void *ptr)	// IN: Kernel VA of first page
 {
-   unsigned i;
-
-   for (i = 0; (1 << i) < numPages; i++) { }
-   free_pages((VA)ptr, i);
+  vfree (ptr);
 }
 
 
@@ -2036,13 +2265,13 @@ HostIF_FreeKernelPages(unsigned numPages, // IN: Number of pages
  */
 
 void
-HostIF_VMLock(VMDriver *vm, // IN
-              int callerID) // IN
+HostIF_VMLock (VMDriver * vm,	// IN
+	       int callerID)	// IN
 {
-   ASSERT(vm);
+  ASSERT (vm);
 
-   ASSERT(vm->vmhost);
-   MutexLock(&vm->vmhost->vmMutex, callerID);
+  ASSERT (vm->vmhost);
+  MutexLock (&vm->vmhost->vmMutex, callerID);
 }
 
 
@@ -2063,13 +2292,13 @@ HostIF_VMLock(VMDriver *vm, // IN
  */
 
 void
-HostIF_VMUnlock(VMDriver *vm, // IN
-                int callerID) // IN
+HostIF_VMUnlock (VMDriver * vm,	// IN
+		 int callerID)	// IN
 {
-   ASSERT(vm);
+  ASSERT (vm);
 
-   ASSERT(vm->vmhost);
-   MutexUnlock(&vm->vmhost->vmMutex, callerID);
+  ASSERT (vm->vmhost);
+  MutexUnlock (&vm->vmhost->vmMutex, callerID);
 }
 
 
@@ -2092,12 +2321,12 @@ HostIF_VMUnlock(VMDriver *vm, // IN
  */
 
 Bool
-HostIF_VMLockIsHeld(VMDriver *vm) // IN
+HostIF_VMLockIsHeld (VMDriver * vm)	// IN
 {
-   ASSERT(vm);
-   ASSERT(vm->vmhost);
+  ASSERT (vm);
+  ASSERT (vm->vmhost);
 
-   return MutexIsLocked(&vm->vmhost->vmMutex);
+  return MutexIsLocked (&vm->vmhost->vmMutex);
 }
 #endif
 
@@ -2138,19 +2367,19 @@ HostIF_VMLockIsHeld(VMDriver *vm) // IN
  */
 
 static Bool
-isVAReadable(VA r)  // IN:
+isVAReadable (VA r)		// IN:
 {
-   mm_segment_t old_fs;
-   uint32 dummy;
-   int ret;
+  mm_segment_t old_fs;
+  uint32 dummy;
+  int ret;
 
-   old_fs = get_fs();
-   set_fs(get_ds());
-   r = APICR_TO_ADDR(r, APICR_VERSION);
-   ret = HostIF_CopyFromUser(&dummy, r, sizeof dummy);
-   set_fs(old_fs);
+  old_fs = get_fs ();
+  set_fs (KERNEL_DS);
+  r = APICR_TO_ADDR (r, APICR_VERSION);
+  ret = HostIF_CopyFromUser (&dummy, r, sizeof dummy);
+  set_fs (old_fs);
 
-   return ret == 0;
+  return ret == 0;
 }
 
 
@@ -2172,22 +2401,26 @@ isVAReadable(VA r)  // IN:
  */
 
 static void
-SetVMAPICAddr(VMDriver *vm, // IN/OUT: driver state
-              MA ma)        // IN: host APIC's ma
+SetVMAPICAddr (VMDriver * vm,	// IN/OUT: driver state
+	       MA ma)		// IN: host APIC's ma
 {
-   volatile void *hostapic;
+  volatile void *hostapic;
 
-   ASSERT_ON_COMPILE(APICR_SIZE <= PAGE_SIZE);
-   hostapic = (volatile void *) ioremap_nocache(ma, PAGE_SIZE);
-   if (hostapic) {
-      if ((APIC_VERSIONREG(hostapic) & 0xF0) == 0x10) {
-         vm->hostAPIC.base = (volatile uint32 (*)[4]) hostapic;
-         ASSERT(vm->vmhost != NULL);
-         vm->vmhost->hostAPICIsMapped = TRUE;
-      } else {
-         iounmap((void*)hostapic);
-      }
-   }
+  ASSERT_ON_COMPILE (APICR_SIZE <= PAGE_SIZE);
+  hostapic = (volatile void *) ioremap_nocache (ma, PAGE_SIZE);
+  if (hostapic)
+    {
+      if ((APIC_VERSIONREG (hostapic) & 0xF0) == 0x10)
+	{
+	  vm->hostAPIC.base = (volatile uint32 (*)[4]) hostapic;
+	  ASSERT (vm->vmhost != NULL);
+	  vm->vmhost->hostAPICIsMapped = TRUE;
+	}
+      else
+	{
+	  iounmap ((void *) hostapic);
+	}
+    }
 }
 
 
@@ -2214,22 +2447,26 @@ SetVMAPICAddr(VMDriver *vm, // IN/OUT: driver state
  */
 
 static Bool
-ProbeAPIC(VMDriver *vm,   // IN/OUT: driver state
-          Bool setVMPtr)  // IN: set a pointer to the APIC's virtual address
+ProbeAPIC (VMDriver * vm,	// IN/OUT: driver state
+	   Bool setVMPtr)	// IN: set a pointer to the APIC's virtual address
 {
-   MA ma = APIC_GetMA();
+  MA ma = APIC_GetMA ();
 
-   if (ma == (MA)-1) {
+  if (ma == (MA) - 1)
+    {
       return FALSE;
-   }
+    }
 
-   if (setVMPtr) {
-      SetVMAPICAddr(vm, ma);
-   } else {
+  if (setVMPtr)
+    {
+      SetVMAPICAddr (vm, ma);
+    }
+  else
+    {
       vm->hostAPIC.base = NULL;
-   }
+    }
 
-   return TRUE;
+  return TRUE;
 }
 #endif
 
@@ -2258,56 +2495,138 @@ ProbeAPIC(VMDriver *vm,   // IN/OUT: driver state
  *----------------------------------------------------------------------
  */
 Bool
-HostIF_APICInit(VMDriver *vm,   // IN:
-                Bool setVMPtr,  // IN:
-                Bool probe)     // IN: force probing
+HostIF_APICInit (VMDriver * vm,	// IN:
+		 Bool setVMPtr,	// IN:
+		 Bool probe)	// IN: force probing
 {
 #if defined(CONFIG_SMP)         || defined(CONFIG_X86_UP_IOAPIC) || \
     defined(CONFIG_X86_UP_APIC) || defined(CONFIG_X86_LOCAL_APIC)
-   static Bool apicIPILogged = FALSE;
-   VA kAddr;
+  static Bool apicIPILogged = FALSE;
+  VA kAddr;
 
-   monitorIPIVector = SPURIOUS_APIC_VECTOR;
+  monitorIPIVector = SPURIOUS_APIC_VECTOR;
 #if defined(POSTED_INTR_VECTOR)
-   hvIPIVector      = POSTED_INTR_VECTOR;
+  hvIPIVector = POSTED_INTR_VECTOR;
 #else
-   hvIPIVector      = 0;
+  hvIPIVector = 0;
 #endif
 
 
-   if (!apicIPILogged) {
-      Log("Monitor IPI vector: %x\n", monitorIPIVector);
-      Log("HV      IPI vector: %x\n", hvIPIVector);
+  if (!apicIPILogged)
+    {
+      Log ("Monitor IPI vector: %x\n", monitorIPIVector);
+      Log ("HV      IPI vector: %x\n", hvIPIVector);
       apicIPILogged = TRUE;
-   }
+    }
 
-   if ((__GET_MSR(MSR_APIC_BASE) & APIC_MSR_X2APIC_ENABLED) != 0) {
-      if (setVMPtr) {
-         vm->hostAPIC.base = NULL;
-         vm->vmhost->hostAPICIsMapped = FALSE;
-         vm->hostAPIC.isX2 = TRUE;
-      }
+  if ((X86MSR_GetMSR (MSR_APIC_BASE) & APIC_MSR_X2APIC_ENABLED) != 0)
+    {
+      if (setVMPtr)
+	{
+	  vm->hostAPIC.base = NULL;
+	  vm->vmhost->hostAPICIsMapped = FALSE;
+	  vm->hostAPIC.isX2 = TRUE;
+	}
       return TRUE;
-   }
+    }
 
-   if (probe && ProbeAPIC(vm, setVMPtr)) {
+  if (probe && ProbeAPIC (vm, setVMPtr))
+    {
       return TRUE;
-   }
+    }
 
-   /*
-    * Normal case: use Linux's pre-mapped APIC.
-    */
-   kAddr = __fix_to_virt(FIX_APIC_BASE);
-   if (!isVAReadable(kAddr)) {
+  /*
+   * Normal case: use Linux's pre-mapped APIC.
+   */
+  kAddr = __fix_to_virt (FIX_APIC_BASE);
+  if (!isVAReadable (kAddr))
+    {
       return TRUE;
-   }
-   if (setVMPtr) {
-      vm->hostAPIC.base = (void *)kAddr;
-   } else {
+    }
+  if (setVMPtr)
+    {
+      vm->hostAPIC.base = (void *) kAddr;
+    }
+  else
+    {
       vm->hostAPIC.base = NULL;
-   }
+    }
 #endif
-   return TRUE;
+  return TRUE;
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * HostIF_GetTimerVectors --
+ *
+ *      Determine which vectors the host might be using for timer
+ *      interrupts.
+ *
+ * Results:
+ *      The host-specific timer interrupt vectors.
+ *
+ * Side effects:
+ *      None.
+ *
+ *----------------------------------------------------------------------
+ */
+
+void
+HostIF_GetTimerVectors (uint8 * v0,	// OUT:
+			uint8 * v1)	// OUT:
+{
+  *v0 = 0xef;			// APIC
+  *v1 = 0x20;			// PIC
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * HostIF_GetMonitorIPIVector --
+ *
+ *      Return a dedicated vector the monitor can use for sending
+ *      IPIs.
+ *
+ * Results:
+ *     The vector determined by HostIF_APICInit.
+ *
+ * Side effects:
+ *      None.
+ *
+ *----------------------------------------------------------------------
+ */
+
+uint8
+HostIF_GetMonitorIPIVector (void)
+{
+  return monitorIPIVector;
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * HostIF_GetHVIPIVector --
+ *
+ *      Return a dedicated vector the monitor can use for posted
+ *      interrupts.
+ *
+ * Results:
+ *     The vector determined by HostIF_APICInit.
+ *
+ * Side effects:
+ *      None.
+ *
+ *----------------------------------------------------------------------
+ */
+
+uint8
+HostIF_GetHVIPIVector (void)
+{
+  return hvIPIVector;
 }
 
 
@@ -2329,82 +2648,91 @@ HostIF_APICInit(VMDriver *vm,   // IN:
  */
 
 int
-HostIF_SemaphoreWait(VMDriver *vm,   // IN:
-                     Vcpuid vcpuid,  // IN:
-                     uint64 *args)   // IN:
+HostIF_SemaphoreWait (VMDriver * vm,	// IN:
+		      Vcpuid vcpuid,	// IN:
+		      uint64 * args)	// IN:
 {
-   struct file *file;
-   mm_segment_t old_fs;
-   int res;
-   int waitFD = args[0];
-   int timeoutms = args[2];
-   uint64 value;
+  struct file *file;
+  mm_segment_t old_fs;
+  int res;
+  int waitFD = args[0];
+  int timeoutms = args[2];
+  uint64 value;
 
-   file = vmware_fget(waitFD);
-   if (file == NULL) {
+  ASSERT (vcpuid < vm->numVCPUs);
+
+  file = vmware_fget (waitFD);
+  if (file == NULL)
+    {
       return MX_WAITERROR;
-   }
+    }
 
-   old_fs = get_fs();
-   set_fs(get_ds());
+  old_fs = get_fs ();
+  set_fs (KERNEL_DS);
 
-   {
-      struct poll_wqueues table;
-      unsigned int mask;
+  {
+    struct poll_wqueues table;
+    unsigned int mask;
 
-      poll_initwait(&table);
-      current->state = TASK_INTERRUPTIBLE;
-      mask = file->f_op->poll(file, &table.pt);
-      if (!(mask & (POLLIN | POLLERR | POLLHUP))) {
-         vm->vmhost->vcpuSemaTask[vcpuid] = current;
-         schedule_timeout(timeoutms * HZ / 1000);  // convert to Hz
-         vm->vmhost->vcpuSemaTask[vcpuid] = NULL;
+    poll_initwait (&table);
+    current->state = TASK_INTERRUPTIBLE;
+    mask = file->f_op->poll (file, &table.pt);
+    if (!(mask & (POLLIN | POLLERR | POLLHUP)))
+      {
+	vm->vmhost->vcpuSemaTask[vcpuid] = current;
+	schedule_timeout (timeoutms * HZ / 1000);	// convert to Hz
+	vm->vmhost->vcpuSemaTask[vcpuid] = NULL;
       }
-      current->state = TASK_RUNNING;
-      poll_freewait(&table);
-   }
+    current->state = TASK_RUNNING;
+    poll_freewait (&table);
+  }
 
-   /*
-    * Userland only writes in multiples of sizeof(uint64). This will allow
-    * the code to happily deal with a pipe or an eventfd. We only care about
-    * reading no bytes (EAGAIN - non blocking fd) or sizeof(uint64).
-    */
+  /*
+   * Userland only writes in multiples of sizeof(uint64). This will allow
+   * the code to happily deal with a pipe or an eventfd. We only care about
+   * reading no bytes (EAGAIN - non blocking fd) or sizeof(uint64).
+   */
 
-   res = file->f_op->read(file, (char *) &value, sizeof value, &file->f_pos);
+  res = file->f_op->read (file, (char *) &value, sizeof value, &file->f_pos);
 
-   if (res == sizeof value) {
+  if (res == sizeof value)
+    {
       res = MX_WAITNORMAL;
-   } else {
-      if (res == 0) {
-         res = -EBADF;
-      }
-   }
+    }
+  else
+    {
+      if (res == 0)
+	{
+	  res = -EBADF;
+	}
+    }
 
-   set_fs(old_fs);
-   fput(file);
+  set_fs (old_fs);
+  fput (file);
 
-   /*
-    * Handle benign errors:
-    * EAGAIN is MX_WAITTIMEDOUT.
-    * The signal-related errors are all mapped into MX_WAITINTERRUPTED.
-    */
+  /*
+   * Handle benign errors:
+   * EAGAIN is MX_WAITTIMEDOUT.
+   * The signal-related errors are all mapped into MX_WAITINTERRUPTED.
+   */
 
-   switch (res) {
-   case -EAGAIN:
+  switch (res)
+    {
+    case -EAGAIN:
       res = MX_WAITTIMEDOUT;
       break;
-   case -EINTR:
-   case -ERESTART:
-   case -ERESTARTSYS:
-   case -ERESTARTNOINTR:
-   case -ERESTARTNOHAND:
+    case -EINTR:
+    case -ERESTART:
+    case -ERESTARTSYS:
+    case -ERESTARTNOINTR:
+    case -ERESTARTNOHAND:
       res = MX_WAITINTERRUPTED;
       break;
-   case -EBADF:
+    case -EBADF:
       res = MX_WAITERROR;
       break;
-   }
-   return res;
+    }
+  return res;
 }
 
 
@@ -2427,16 +2755,23 @@ HostIF_SemaphoreWait(VMDriver *vm,   // IN:
  */
 
 void
-HostIF_SemaphoreForceWakeup(VMDriver *vm,       // IN:
-                            const VCPUSet *vcs) // IN:
+HostIF_SemaphoreForceWakeup (VMDriver * vm,	// IN:
+			     const VCPUSet * vcs)	// IN:
 {
-   FOR_EACH_VCPU_IN_SET(vcs, vcpuid) {
-      struct task_struct *t = vm->vmhost->vcpuSemaTask[vcpuid];
-      vm->vmhost->vcpuSemaTask[vcpuid] = NULL;
-      if (t && (t->state & TASK_INTERRUPTIBLE)) {
-         wake_up_process(t);
+  FOR_EACH_VCPU_IN_SET_WITH_MAX (vcs, vcpuid, vm->numVCPUs)
+  {
+    /*
+     * To avoid lost wake-up race and to avoid redundant wakeups, use
+     * "xchg" to read and clear atomically; wake_up_process() is non-lossy.
+     */
+    struct task_struct *t =
+      (struct task_struct *) xchg (&vm->vmhost->vcpuSemaTask[vcpuid], NULL);
+    if (t && (t->state & TASK_INTERRUPTIBLE))
+      {
+	wake_up_process (t);
       }
-   } ROF_EACH_VCPU_IN_SET();
+  }
+  ROF_EACH_VCPU_IN_SET_WITH_MAX ();
 }
 
 
@@ -2461,57 +2796,90 @@ HostIF_SemaphoreForceWakeup(VMDriver *vm,       // IN:
  */
 
 int
-HostIF_SemaphoreSignal(uint64 *args)  // IN:
+HostIF_SemaphoreSignal (uint64 * args)	// IN:
 {
-   struct file *file;
-   mm_segment_t old_fs;
-   int res;
-   int signalFD = args[1];
-   uint64 value = 1;  // make an eventfd happy should it be there
+  struct file *file;
+  mm_segment_t old_fs;
+  int res;
+  int signalFD = args[1];
+  uint64 value = 1;		// make an eventfd happy should it be there
 
-   file = vmware_fget(signalFD);
-   if (!file) {
+  file = vmware_fget (signalFD);
+  if (!file)
+    {
       return MX_WAITERROR;
-   }
+    }
 
-   old_fs = get_fs();
-   set_fs(get_ds());
+  old_fs = get_fs ();
+  set_fs (KERNEL_DS);
 
-   /*
-    * Always write sizeof(uint64) bytes. This works fine for eventfd and
-    * pipes. The data written is formatted to make an eventfd happy should
-    * it be present.
-    */
+  /*
+   * Always write sizeof(uint64) bytes. This works fine for eventfd and
+   * pipes. The data written is formatted to make an eventfd happy should
+   * it be present.
+   */
 
-   res = file->f_op->write(file, (char *) &value, sizeof value, &file->f_pos);
+  res = file->f_op->write (file, (char *) &value, sizeof value, &file->f_pos);
 
-   if (res == sizeof value) {
+  if (res == sizeof value)
+    {
       res = MX_WAITNORMAL;
-   }
+    }
 
-   set_fs(old_fs);
-   fput(file);
+  set_fs (old_fs);
+  fput (file);
 
-   /*
-    * Handle benign errors:
-    * EAGAIN is MX_WAITTIMEDOUT.
-    * The signal-related errors are all mapped into MX_WAITINTERRUPTED.
-    */
+  /*
+   * Handle benign errors:
+   * EAGAIN is MX_WAITTIMEDOUT.
+   * The signal-related errors are all mapped into MX_WAITINTERRUPTED.
+   */
 
-   switch (res) {
-   case -EAGAIN:
+  switch (res)
+    {
+    case -EAGAIN:
       // The pipe is full, so it is already signalled. Success.
       res = MX_WAITNORMAL;
       break;
-   case -EINTR:
-   case -ERESTART:
-   case -ERESTARTSYS:
-   case -ERESTARTNOINTR:
-   case -ERESTARTNOHAND:
+    case -EINTR:
+    case -ERESTART:
+    case -ERESTARTSYS:
+    case -ERESTARTNOINTR:
+    case -ERESTARTNOHAND:
       res = MX_WAITINTERRUPTED;
       break;
-   }
-   return res;
+    }
+  return res;
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * HostIF_OneIPI --
+ *
+ *    If the passed VCPU thread is on some CPU in the system,
+ *    attempt to hit it with an IPI.
+ *
+ * Result:
+ *    None.
+ *
+ *----------------------------------------------------------------------
+ */
+
+void
+HostIF_OneIPI (VMDriver * vm,	// IN:
+	       Vcpuid v)	// IN:
+{
+  uint32 targetHostCpu;
+
+  ASSERT (v < vm->numVCPUs);
+  targetHostCpu = Atomic_Read32 (&vm->currentHostCpu[v]);
+  if (targetHostCpu != INVALID_PCPU)
+    {
+      ASSERT (targetHostCpu < MAX_PCPUS);
+      arch_send_call_function_single_ipi (targetHostCpu);
+    }
 }
 
 
@@ -2523,38 +2891,27 @@ HostIF_SemaphoreSignal(uint64 *args)  // IN:
  *    If the passed VCPU threads are on some CPUs in the system,
  *    attempt to hit them with an IPI.
  *
- *    On older Linux systems we do a broadcast.
- *
  * Result:
- *    The mode used to send IPIs.
+ *    None.
  *
  *----------------------------------------------------------------------
  */
 
-HostIFIPIMode
-HostIF_IPI(VMDriver *vm,                // IN:
-           const VCPUSet *ipiTargets)   // IN:
+void
+HostIF_IPI (VMDriver * vm,	// IN:
+	    const VCPUSet * ipiTargets)	// IN:
 {
-   HostIFIPIMode mode = IPI_NONE;
-
-   ASSERT(vm);
-
-   FOR_EACH_VCPU_IN_SET(ipiTargets, v) {
-      uint32 targetHostCpu = vm->currentHostCpu[v];
-      if (targetHostCpu != INVALID_PCPU) {
-         ASSERT(targetHostCpu < MAX_PCPUS);
-         arch_send_call_function_single_ipi(targetHostCpu);
-         mode = IPI_UNICAST;
-      }
-   } ROF_EACH_VCPU_IN_SET();
-
-   return mode;
+  FOR_EACH_VCPU_IN_SET_WITH_MAX (ipiTargets, v, vm->numVCPUs)
+  {
+    HostIF_OneIPI (vm, v);
+  } ROF_EACH_VCPU_IN_SET_WITH_MAX ();
 }
 
 
-typedef struct {
-   Atomic_uint32 index;
-   CPUIDQuery *query;
+typedef struct
+{
+  Atomic_uint32 index;
+  CPUIDQuery *query;
 } HostIFGetCpuInfoData;
 
 
@@ -2575,23 +2932,24 @@ typedef struct {
  */
 
 static void
-HostIFGetCpuInfo(void *clientData) // IN/OUT: A HostIFGetCpuInfoData *
+HostIFGetCpuInfo (void *clientData)	// IN/OUT: A HostIFGetCpuInfoData *
 {
-   HostIFGetCpuInfoData *data = (HostIFGetCpuInfoData *)clientData;
-   CPUIDQuery *query;
-   uint32 index;
+  HostIFGetCpuInfoData *data = (HostIFGetCpuInfoData *) clientData;
+  CPUIDQuery *query;
+  uint32 index;
 
-   ASSERT(data);
-   query = data->query;
-   ASSERT(query);
+  ASSERT (data);
+  query = data->query;
+  ASSERT (query);
 
-   index = Atomic_ReadInc32(&data->index);
-   if (index >= query->numLogicalCPUs) {
+  index = Atomic_ReadInc32 (&data->index);
+  if (index >= query->numLogicalCPUs)
+    {
       return;
-   }
+    }
 
-   query->logicalCPUs[index].tag = HostIF_GetCurrentPCPU();
-   __GET_CPUID2(query->eax, query->ecx, &query->logicalCPUs[index].regs);
+  query->logicalCPUs[index].tag = HostIF_GetCurrentPCPU ();
+  __GET_CPUID2 (query->eax, query->ecx, &query->logicalCPUs[index].regs);
 }
 
 
@@ -2617,33 +2975,34 @@ HostIFGetCpuInfo(void *clientData) // IN/OUT: A HostIFGetCpuInfoData *
  */
 
 Bool
-HostIF_GetAllCpuInfo(CPUIDQuery *query) // IN/OUT
+HostIF_GetAllCpuInfo (CPUIDQuery * query)	// IN/OUT
 {
-   HostIFGetCpuInfoData data;
+  HostIFGetCpuInfoData data;
 
-   Atomic_Write32(&data.index, 0);
-   data.query = query;
+  Atomic_Write32 (&data.index, 0);
+  data.query = query;
 
-   /*
-    * XXX Linux has userland APIs to bind a thread to a processor, so we could
-    *     probably implement this in userland like we do on Win32.
-    */
+  /*
+   * XXX Linux has userland APIs to bind a thread to a processor, so we could
+   *     probably implement this in userland like we do on Win32.
+   */
 
-   HostIF_CallOnEachCPU(HostIFGetCpuInfo, &data);
+  HostIF_CallOnEachCPU (HostIFGetCpuInfo, &data);
 
-   /*
-    * At this point, Atomic_Read32(&data.index) is the number of logical CPUs
-    * who replied.
-    */
+  /*
+   * At this point, Atomic_Read32(&data.index) is the number of logical CPUs
+   * who replied.
+   */
 
-   if (Atomic_Read32(&data.index) > query->numLogicalCPUs) {
+  if (Atomic_Read32 (&data.index) > query->numLogicalCPUs)
+    {
       return FALSE;
-   }
+    }
 
-   ASSERT(Atomic_Read32(&data.index) <= query->numLogicalCPUs);
-   query->numLogicalCPUs = Atomic_Read32(&data.index);
+  ASSERT (Atomic_Read32 (&data.index) <= query->numLogicalCPUs);
+  query->numLogicalCPUs = Atomic_Read32 (&data.index);
 
-   return TRUE;
+  return TRUE;
 }
 
 
@@ -2664,13 +3023,13 @@ HostIF_GetAllCpuInfo(CPUIDQuery *query) // IN/OUT
  */
 
 void
-HostIF_CallOnEachCPU(void (*func)(void*), // IN: function to call
-                     void *data)          // IN/OUT: argument to function
+HostIF_CallOnEachCPU (void (*func) (void *),	// IN: function to call
+		      void *data)	// IN/OUT: argument to function
 {
-   preempt_disable();
-   (*func)(data);
-   (void)smp_call_function(*func, data, 1);
-   preempt_enable();
+  preempt_disable ();
+  (*func) (data);
+  (void) smp_call_function (*func, data, 1);
+  preempt_enable ();
 }
 
 
@@ -2692,53 +3051,54 @@ HostIF_CallOnEachCPU(void (*func)(void*), // IN: function to call
  */
 
 Bool
-HostIFCheckTrackedMPN(VMDriver *vm, // IN: The VM instance
-                      MPN mpn)      // IN: The MPN
+HostIFCheckTrackedMPN (VMDriver * vm,	// IN: The VM instance
+		       MPN mpn)	// IN: The MPN
 {
-   VMHost * const vmh = vm->vmhost;
+  VMHost *const vmh = vm->vmhost;
 
-   if (vmh == NULL) {
+  if (vmh == NULL)
+    {
       return FALSE;
-   }
+    }
 
-   HostIF_VMLock(vm, 32); // Debug version of PhysTrack wants VM's lock.
-   if (vmh->lockedPages) {
-      if (PhysTrack_Test(vmh->lockedPages, mpn)) {
-         HostIF_VMUnlock(vm, 32);
-         return TRUE;
-      }
-   }
+  HostIF_VMLock (vm, 32);	// Debug version of PhysTrack wants VM's lock.
+  if (vmh->lockedPages)
+    {
+      if (PhysTrack_Test (vmh->lockedPages, mpn))
+	{
+	  HostIF_VMUnlock (vm, 32);
+	  return TRUE;
+	}
+    }
 
-   if (vmh->AWEPages) {
-      if (PhysTrack_Test(vmh->AWEPages, mpn)) {
-         HostIF_VMUnlock(vm, 32);
-         return TRUE;
-      }
-   }
+  if (vmh->AWEPages)
+    {
+      if (PhysTrack_Test (vmh->AWEPages, mpn))
+	{
+	  HostIF_VMUnlock (vm, 32);
+	  return TRUE;
+	}
+    }
 
-   if (vm->memtracker) {
-      if (MemTrack_LookupMPN(vm->memtracker, mpn) != NULL) {
-         HostIF_VMUnlock(vm, 32);
-         return TRUE;
-      }
-   }
+  if (vm->memtracker)
+    {
+      if (MemTrack_LookupMPN (vm->memtracker, mpn) != NULL)
+	{
+	  HostIF_VMUnlock (vm, 32);
+	  return TRUE;
+	}
+    }
 
-   if (vm->ptpTracker) {
-      if (MemTrack_LookupMPN(vm->ptpTracker, mpn) != NULL) {
-         HostIF_VMUnlock(vm, 32);
-         return TRUE;
-      }
-   }
-   HostIF_VMUnlock(vm, 32);
-
-   if (vmx86_debug) {
-      /*
-       * The monitor may have old KSeg mappings to pages which it no longer
-       * owns.  Minimize customer noise by only logging this for developers.
-       */
-      Log("%s: MPN %" FMT64 "x not owned by this VM\n", __FUNCTION__, mpn);
-   }
-   return FALSE;
+  if (vm->ptpTracker)
+    {
+      if (MemTrack_LookupMPN (vm->ptpTracker, mpn) != NULL)
+	{
+	  HostIF_VMUnlock (vm, 32);
+	  return TRUE;
+	}
+    }
+  HostIF_VMUnlock (vm, 32);
+  return FALSE;
 }
 
 
@@ -2762,41 +3122,48 @@ HostIFCheckTrackedMPN(VMDriver *vm, // IN: The VM instance
  */
 
 int
-HostIF_ReadPhysical(VMDriver *vm,      // IN: The VM instance
-                    MA ma,             // MA to be read
-                    VA64 addr,         // dst for read data
-                    Bool kernelBuffer, // is the buffer in kernel space?
-                    size_t len)        // number of bytes to read
+HostIF_ReadPhysical (VMDriver * vm,	// IN: The VM instance
+		     MA ma,	// MA to be read
+		     VA64 addr,	// dst for read data
+		     Bool kernelBuffer,	// is the buffer in kernel space?
+		     size_t len)	// number of bytes to read
 {
-   int ret = 0;
-   void* ptr;
-   struct page* page;
-   MPN mpn = MA_2_MPN(ma);
-   uint32 offset = ma & (PAGE_SIZE - 1);
+  int ret = 0;
+  void *ptr;
+  struct page *page;
+  MPN mpn = MA_2_MPN (ma);
+  uint32 offset = ma & (PAGE_SIZE - 1);
 
-   if (mpn == INVALID_MPN) {
+  if (mpn == INVALID_MPN)
+    {
       return -EFAULT;
-   }
-   if (MA_2_MPN(ma + len - 1) != mpn) {
+    }
+  if (MA_2_MPN (ma + len - 1) != mpn)
+    {
       return -EFAULT;
-   }
-   if (!HostIFCheckTrackedMPN(vm, mpn)) {
+    }
+  if (!HostIFCheckTrackedMPN (vm, mpn))
+    {
       return -EFAULT;
-   }
-   page = pfn_to_page(mpn);
-   ptr = kmap(page);
-   if (ptr == NULL) {
+    }
+  page = pfn_to_page (mpn);
+  ptr = kmap (page);
+  if (ptr == NULL)
+    {
       return -ENOMEM;
-   }
+    }
 
-   if (kernelBuffer) {
-      memcpy(VA64ToPtr(addr), ptr + offset, len);
-   } else {
-      ret = HostIF_CopyToUser(addr, ptr + offset, len);
-   }
-   kunmap(page);
+  if (kernelBuffer)
+    {
+      memcpy (VA64ToPtr (addr), ptr + offset, len);
+    }
+  else
+    {
+      ret = HostIF_CopyToUser (addr, ptr + offset, len);
+    }
+  kunmap (page);
 
-   return ret;
+  return ret;
 }
 
 
@@ -2820,50 +3187,57 @@ HostIF_ReadPhysical(VMDriver *vm,      // IN: The VM instance
  */
 
 int
-HostIFWritePhysicalWork(MA ma,             // MA to be written to
-                        VA64 addr,         // src data to write
-                        Bool kernelBuffer, // is the buffer in kernel space?
-                        size_t len)        // number of bytes to write
+HostIFWritePhysicalWork (MA ma,	// MA to be written to
+			 VA64 addr,	// src data to write
+			 Bool kernelBuffer,	// is the buffer in kernel space?
+			 size_t len)	// number of bytes to write
 {
-   int ret = 0;
-   void* ptr;
-   struct page* page;
-   MPN mpn = MA_2_MPN(ma);
-   uint32 offset = ma & (PAGE_SIZE - 1);
+  int ret = 0;
+  void *ptr;
+  struct page *page;
+  MPN mpn = MA_2_MPN (ma);
+  uint32 offset = ma & (PAGE_SIZE - 1);
 
-   if (mpn == INVALID_MPN) {
+  if (mpn == INVALID_MPN)
+    {
       return -EFAULT;
-   }
-   if (MA_2_MPN(ma + len - 1) != mpn) {
+    }
+  if (MA_2_MPN (ma + len - 1) != mpn)
+    {
       return -EFAULT;
-   }
-   page = pfn_to_page(mpn);
-   ptr = kmap(page);
-   if (ptr == NULL) {
+    }
+  page = pfn_to_page (mpn);
+  ptr = kmap (page);
+  if (ptr == NULL)
+    {
       return -ENOMEM;
-   }
+    }
 
-   if (kernelBuffer) {
-      memcpy(ptr + offset, VA64ToPtr(addr), len);
-   } else {
-      ret = HostIF_CopyFromUser(ptr + offset, addr, len);
-   }
-   kunmap(page);
+  if (kernelBuffer)
+    {
+      memcpy (ptr + offset, VA64ToPtr (addr), len);
+    }
+  else
+    {
+      ret = HostIF_CopyFromUser (ptr + offset, addr, len);
+    }
+  kunmap (page);
 
-   return ret;
+  return ret;
 }
 
 int
-HostIF_WritePhysical(VMDriver *vm,      // IN: The VM instance
-                     MA ma,             // MA to be written to
-                     VA64 addr,         // src data to write
-                     Bool kernelBuffer, // is the buffer in kernel space?
-                     size_t len)        // number of bytes to write
+HostIF_WritePhysical (VMDriver * vm,	// IN: The VM instance
+		      MA ma,	// MA to be written to
+		      VA64 addr,	// src data to write
+		      Bool kernelBuffer,	// is the buffer in kernel space?
+		      size_t len)	// number of bytes to write
 {
-   if (!HostIFCheckTrackedMPN(vm, MA_2_MPN(ma))) {
+  if (!HostIFCheckTrackedMPN (vm, MA_2_MPN (ma)))
+    {
       return -EFAULT;
-   }
-   return HostIFWritePhysicalWork(ma, addr, kernelBuffer, len);
+    }
+  return HostIFWritePhysicalWork (ma, addr, kernelBuffer, len);
 }
 
 
@@ -2887,10 +3261,10 @@ HostIF_WritePhysical(VMDriver *vm,      // IN: The VM instance
  */
 
 int
-HostIF_WriteMachinePage(MPN mpn,   // IN: MPN of the page
-                        VA64 addr) // IN: data to write to the page
+HostIF_WriteMachinePage (MPN mpn,	// IN: MPN of the page
+			 VA64 addr)	// IN: data to write to the page
 {
-   return HostIFWritePhysicalWork(MPN_2_MA(mpn), addr, TRUE, PAGE_SIZE);
+  return HostIFWritePhysicalWork (MPN_2_MA (mpn), addr, TRUE, PAGE_SIZE);
 }
 
 
@@ -2909,12 +3283,34 @@ HostIF_WriteMachinePage(MPN mpn,   // IN: MPN of the page
  */
 
 MPN
-HostIF_GetNextAnonPage(VMDriver *vm, MPN inMPN)
+HostIF_GetNextAnonPage (VMDriver * vm, MPN inMPN)
 {
-   if (!vm->vmhost || !vm->vmhost->AWEPages) {
+  if (!vm->vmhost || !vm->vmhost->AWEPages)
+    {
       return INVALID_MPN;
-   }
-   return PhysTrack_GetNext(vm->vmhost->AWEPages, inMPN);
+    }
+  return PhysTrack_GetNext (vm->vmhost->AWEPages, inMPN);
+}
+
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * HostIF_GetNumAnonPages --
+ *
+ *      Returns the number of anon MPNs used by this VM.
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+PageCnt
+HostIF_GetNumAnonPages (VMDriver * vm)
+{
+  if (!vm->vmhost || !vm->vmhost->AWEPages)
+    {
+      return 0;
+    }
+  return PhysTrack_GetNumTrackedPages (vm->vmhost->AWEPages);
 }
 
 
@@ -2936,9 +3332,9 @@ HostIF_GetNextAnonPage(VMDriver *vm, MPN inMPN)
  */
 
 uint32
-HostIF_GetCurrentPCPU(void)
+HostIF_GetCurrentPCPU (void)
 {
-   return smp_processor_id();
+  return smp_processor_id ();
 }
 
 
@@ -2959,16 +3355,17 @@ HostIF_GetCurrentPCPU(void)
  */
 
 int
-HostIFStartTimer(Bool rateChanged,  //IN: Did rate change?
-                 unsigned int rate) //IN: current clock rate
+HostIFStartTimer (Bool rateChanged,	//IN: Did rate change?
+		  unsigned int rate)	//IN: current clock rate
 {
-   static unsigned long slack = 0;
-   static ktime_t expires;
-   int timerPeriod;
+  static unsigned long slack = 0;
+  static ktime_t expires;
+  int timerPeriod;
 
-   if (rateChanged) {
+  if (rateChanged)
+    {
       timerPeriod = NSEC_PER_SEC / rate;
-      expires = ktime_set(0, timerPeriod);
+      expires = ktime_set (0, timerPeriod);
       /*
        * Allow the kernel to expire the timer at its convenience.
        * ppoll() uses 0.1% of the timeout value.  I think we can
@@ -2976,11 +3373,11 @@ HostIFStartTimer(Bool rateChanged,  //IN: Did rate change?
        */
 
       slack = timerPeriod / 100;
-   }
-   set_current_state(TASK_INTERRUPTIBLE);
-   schedule_hrtimeout_range(&expires, slack, HRTIMER_MODE_REL);
+    }
+  set_current_state (TASK_INTERRUPTIBLE);
+  schedule_hrtimeout_range (&expires, slack, HRTIMER_MODE_REL);
 
-   return 0;
+  return 0;
 }
 
 
@@ -3005,25 +3402,28 @@ HostIFStartTimer(Bool rateChanged,  //IN: Did rate change?
  */
 
 static int
-HostIFFastClockThread(void *unused)  // IN:
+HostIFFastClockThread (void *unused)	// IN:
 {
-   int res;
-   mm_segment_t oldFS;
-   unsigned int rate = 0;
-   unsigned int prevRate = 0;
+  int res;
+  mm_segment_t oldFS;
+  unsigned int rate = 0;
+  unsigned int prevRate = 0;
 
-   oldFS = get_fs();
-   set_fs(KERNEL_DS);
-   allow_signal(SIGKILL);
+  oldFS = get_fs ();
+  set_fs (KERNEL_DS);
+  allow_signal (SIGKILL);
 
-   while ((rate = linuxState.fastClockRate) > MIN_RATE) {
-      if (kthread_should_stop()) {
-         goto out;
-      }
-      res = HostIFStartTimer(rate != prevRate, rate);
-      if (res < 0) {
-         goto out;
-      }
+  while ((rate = linuxState.fastClockRate) > MIN_RATE)
+    {
+      if (kthread_should_stop ())
+	{
+	  goto out;
+	}
+      res = HostIFStartTimer (rate != prevRate, rate);
+      if (res < 0)
+	{
+	  goto out;
+	}
       prevRate = rate;
 
 #if defined(CONFIG_SMP)
@@ -3031,27 +3431,30 @@ HostIFFastClockThread(void *unused)  // IN:
        * IPI each VCPU thread that is in the monitor and is due to
        * fire a MonTimer callback.
        */
-      Vmx86_MonTimerIPI();
+      Vmx86_MonTimerIPI ();
 #endif
-   }
+    }
 
- out:
-   set_fs(oldFS);
+out:
+  set_fs (oldFS);
 
-   /*
-    * Do not exit thread until we are told to do so.
-    */
+  /*
+   * Do not exit thread until we are told to do so.
+   */
 
-   do {
-      set_current_state(TASK_UNINTERRUPTIBLE);
-      if (kthread_should_stop()) {
-         break;
-      }
-      schedule();
-   } while (1);
-   set_current_state(TASK_RUNNING);
+  do
+    {
+      set_current_state (TASK_UNINTERRUPTIBLE);
+      if (kthread_should_stop ())
+	{
+	  break;
+	}
+      schedule ();
+    }
+  while (1);
+  set_current_state (TASK_RUNNING);
 
-   return 0;
+  return 0;
 }
 
 
@@ -3081,202 +3484,64 @@ HostIFFastClockThread(void *unused)  // IN:
  */
 
 int
-HostIF_SetFastClockRate(unsigned int rate) // IN: Frequency in Hz.
+HostIF_SetFastClockRate (unsigned int rate)	// IN: Frequency in Hz.
 {
-   ASSERT(MutexIsLocked(&fastClockMutex));
-   linuxState.fastClockRate = rate;
+  ASSERT (MutexIsLocked (&fastClockMutex));
+  linuxState.fastClockRate = rate;
 
-   /*
-    * Overview
-    * --------
-    * An SMP Linux kernel programs the 8253 timer (to increment the 'jiffies'
-    * counter) _and_ all local APICs (to run the scheduler code) to deliver
-    * interrupts HZ times a second.
-    *
-    * Time
-    * ----
-    * The kernel tries very hard to spread all these interrupts evenly over
-    * time, i.e. on a 1 CPU system, the 1 local APIC phase is shifted by 1/2
-    * period compared to the 8253, and on a 2 CPU system, the 2 local APIC
-    * phases are respectively shifted by 1/3 and 2/3 period compared to the
-    * 8253. This is done to reduce contention on locks guarding the global task
-    * queue.
-    *
-    * Space
-    * -----
-    * The 8253 interrupts are distributed between physical CPUs, evenly on a P3
-    * system, whereas on a P4 system physical CPU 0 gets all of them.
-    *
-    * Long story short, unless the monitor requested rate is significantly
-    * higher than HZ, we don't need to send IPIs to periodically kick vCPU
-    * threads running in the monitor on all physical CPUs.
-    */
+  /*
+   * Overview
+   * --------
+   * An SMP Linux kernel programs the 8253 timer (to increment the 'jiffies'
+   * counter) _and_ all local APICs (to run the scheduler code) to deliver
+   * interrupts HZ times a second.
+   *
+   * Time
+   * ----
+   * The kernel tries very hard to spread all these interrupts evenly over
+   * time, i.e. on a 1 CPU system, the 1 local APIC phase is shifted by 1/2
+   * period compared to the 8253, and on a 2 CPU system, the 2 local APIC
+   * phases are respectively shifted by 1/3 and 2/3 period compared to the
+   * 8253. This is done to reduce contention on locks guarding the global task
+   * queue.
+   *
+   * Space
+   * -----
+   * The 8253 interrupts are distributed between physical CPUs, evenly on a P3
+   * system, whereas on a P4 system physical CPU 0 gets all of them.
+   *
+   * Long story short, unless the monitor requested rate is significantly
+   * higher than HZ, we don't need to send IPIs to periodically kick vCPU
+   * threads running in the monitor on all physical CPUs.
+   */
 
-   if (rate > MIN_RATE) {
-      if (!linuxState.fastClockThread) {
-         struct task_struct *rtcTask;
+	if (rate > MIN_RATE) {
+		if (!linuxState.fastClockThread) {
+			struct task_struct *rtcTask;
+			rtcTask = kthread_run (HostIFFastClockThread, NULL, "vmware-clk");
+			if (IS_ERR (rtcTask)) {
+				long err = PTR_ERR (rtcTask);
+				/*
+				 * Ignore ERESTARTNOINTR silently, it occurs when signal is
+				 * pending, and syscall layer automatically reissues operation
+				 * after signal is handled.
+				 */
 
-         rtcTask = kthread_run(HostIFFastClockThread, NULL, "vmware-clk");
-         if (IS_ERR(rtcTask)) {
-            long err = PTR_ERR(rtcTask);
-
-            /*
-             * Ignore ERESTARTNOINTR silently, it occurs when signal is
-             * pending, and syscall layer automatically reissues operation
-             * after signal is handled.
-             */
-
-            if (err != -ERESTARTNOINTR) {
-               Warning("vmmon cannot start hrtimer watch thread: %ld\n", err);
-            }
-            return -err;
-         }
-         linuxState.fastClockThread = rtcTask;
-      }
-   } else {
-      if (linuxState.fastClockThread) {
-         force_sig(SIGKILL, linuxState.fastClockThread);
-         kthread_stop(linuxState.fastClockThread);
-
-         linuxState.fastClockThread = NULL;
-      }
-   }
-
-   return 0;
-}
-
-
-/*
- *-----------------------------------------------------------------------------
- *
- * HostIF_MapUserMem --
- *
- *      Obtain kernel pointer to user memory. The pages backing the user memory
- *      address are locked into memory (this allows the pointer to be used in
- *      contexts where paging is undesirable or impossible).
- *
- * Results:
- *      On success, returns the kernel virtual address, along with a handle to
- *      be used for unmapping.
- *      On failure, returns NULL.
- *
- * Side effects:
- *      Yes.
- *
- *-----------------------------------------------------------------------------
- */
-
-void *
-HostIF_MapUserMem(VA addr,                  // IN: User memory virtual address
-                  size_t size,              // IN: Size of memory desired
-                  VMMappedUserMem **handle) // OUT: Handle to mapped memory
-{
-   void *p = (void *) (uintptr_t) addr;
-   VMMappedUserMem *newHandle;
-   VA offset = addr & (PAGE_SIZE - 1);
-   size_t numPagesNeeded = ((offset + size) / PAGE_SIZE) + 1;
-   size_t handleSize =
-      sizeof *newHandle + numPagesNeeded * sizeof newHandle->pages[0];
-   void *mappedAddr;
-
-   ASSERT(handle);
-
-   if (!access_ok(VERIFY_WRITE, p, size)) {
-      printk(KERN_ERR "%s: Couldn't verify write to uva 0x%p with size %"
-             FMTSZ"u\n", __func__, p, size);
-
-      return NULL;
-   }
-
-   newHandle = kmalloc(handleSize, GFP_KERNEL);
-   if (newHandle == NULL) {
-      printk(KERN_ERR "%s: Couldn't allocate %"FMTSZ"u bytes of memory\n",
-             __func__, handleSize);
-
-      return NULL;
-   }
-
-   if (HostIFGetUserPages(p, newHandle->pages, numPagesNeeded)) {
-      kfree(newHandle);
-      printk(KERN_ERR "%s: Couldn't get %"FMTSZ"u %s for uva 0x%p\n", __func__,
-             numPagesNeeded, numPagesNeeded > 1 ? "pages" : "page", p);
-
-      return NULL;
-   }
-
-   if (numPagesNeeded > 1) {
-      /*
-       * Unlike kmap(), vmap() can fail. If it does, we need to release the
-       * pages that we acquired in HostIFGetUserPages().
-       */
-
-      mappedAddr = vmap(newHandle->pages, numPagesNeeded, VM_MAP, PAGE_KERNEL);
-      if (mappedAddr == NULL) {
-         unsigned int i;
-         for (i = 0; i < numPagesNeeded; i++) {
-            put_page(newHandle->pages[i]);
-         }
-         kfree(newHandle);
-         printk(KERN_ERR "%s: Couldn't vmap %"FMTSZ"u %s for uva 0x%p\n",
-                __func__, numPagesNeeded,
-                numPagesNeeded > 1 ? "pages" : "page", p);
-
-         return NULL;
-      }
-   } else {
-      mappedAddr = kmap(newHandle->pages[0]);
-   }
-
-   printk(KERN_DEBUG "%s: p = 0x%p, offset = 0x%p, numPagesNeeded = %"FMTSZ"u,"
-          " handleSize = %"FMTSZ"u, mappedAddr = 0x%p\n",
-          __func__, p, (void *)offset, numPagesNeeded, handleSize, mappedAddr);
-
-   newHandle->numPages = numPagesNeeded;
-   newHandle->addr = mappedAddr;
-   *handle = newHandle;
-
-   return mappedAddr + offset;
-}
-
-
-/*
- *-----------------------------------------------------------------------------
- *
- * HostIF_UnmapUserMem --
- *
- *      Unmap user memory from HostIF_MapUserMem().
- *
- * Results:
- *      None.
- *
- * Side effects:
- *      Yes.
- *
- *-----------------------------------------------------------------------------
- */
-
-void
-HostIF_UnmapUserMem(VMMappedUserMem *handle) // IN: Handle to mapped memory
-{
-   unsigned int i;
-
-   if (handle == NULL) {
-      return;
-   }
-
-   printk(KERN_DEBUG "%s: numPages = %"FMTSZ"u, addr = 0x%p\n",
-          __func__, handle->numPages, handle->addr);
-
-   if (handle->numPages > 1) {
-      vunmap(handle->addr);
-   } else {
-      kunmap(handle->pages[0]);
-   }
-
-   for (i = 0; i < handle->numPages; i++) {
-      put_page(handle->pages[i]);
-   }
-   kfree(handle);
+				if (err != -ERESTARTNOINTR) {
+					Warning("vmmon cannot start hrtimer watch thread: %ld\n", err);
+				}
+				return -err;
+			}
+			linuxState.fastClockThread = rtcTask;
+		}
+	} else {
+		if (linuxState.fastClockThread) {
+			send_sig (SIGKILL, linuxState.fastClockThread, 1);
+			kthread_stop (linuxState.fastClockThread);
+			linuxState.fastClockThread = NULL;
+		}
+	}
+	return 0;
 }
 
 /*
@@ -3300,15 +3565,14 @@ HostIF_UnmapUserMem(VMMappedUserMem *handle) // IN: Handle to mapped memory
  *-----------------------------------------------------------------------------
  */
 int
-HostIF_SafeRDMSR(unsigned int msr,   // IN
-                 uint64 *val)        // OUT: MSR value
+HostIF_SafeRDMSR (unsigned int msr,	// IN
+		  uint64 * val)	// OUT: MSR value
 {
-   int err;
-   u64 v;
+  int err;
+  u64 v;
 
-   err = rdmsrl_safe(msr, &v);
-   *val = (err == 0) ? v : 0;  // Linux corrupts 'v' on error
+  err = rdmsrl_safe (msr, &v);
+  *val = (err == 0) ? v : 0;	// Linux corrupts 'v' on error
 
-   return err;
+  return err;
 }
-

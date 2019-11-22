@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2010 VMware, Inc. All rights reserved.
+ * Copyright (C) 2010,2018 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -1047,7 +1047,8 @@ VMCIDoorbell_Sync(void)
  */
 
 Bool
-VMCI_RegisterNotificationBitmap(PPN bitmapPPN)
+VMCI_RegisterNotificationBitmap(PPN bitmapPPN,     // IN
+                                Bool usePPN64)     // IN
 {
    int result;
    VMCINotifyBitmapSetMsg bitmapSetMsg;
@@ -1062,11 +1063,15 @@ VMCI_RegisterNotificationBitmap(PPN bitmapPPN)
                                            VMCI_SET_NOTIFY_BITMAP);
    bitmapSetMsg.hdr.src = VMCI_ANON_SRC_HANDLE;
    bitmapSetMsg.hdr.payloadSize = sizeof bitmapSetMsg - VMCI_DG_HEADERSIZE;
-   bitmapSetMsg.bitmapPPN = bitmapPPN;
+   if (usePPN64) {
+      bitmapSetMsg.bitmapPPN64 = bitmapPPN;
+   } else {
+      bitmapSetMsg.bitmapPPN32 = VMCI_PPN64_TO_PPN32(bitmapPPN);
+   }
 
    result = VMCI_SendDatagram((VMCIDatagram *)&bitmapSetMsg);
    if (result != VMCI_SUCCESS) {
-      VMCI_DEBUG_LOG(4, (LGPFX"Failed to register (PPN=%u) as "
+      VMCI_DEBUG_LOG(4, (LGPFX"Failed to register (PPN=%"FMT64"u) as "
                          "notification bitmap (error=%d).\n",
                          bitmapPPN, result));
       return FALSE;

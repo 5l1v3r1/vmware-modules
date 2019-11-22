@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2006-2016 VMware, Inc. All rights reserved.
+ * Copyright (C) 2006-2016,2018 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -155,14 +155,26 @@ typedef struct VMCIResourcesQueryMsg {
  * Struct used for setting the notification bitmap.  All fields in
  * struct are aligned to their natural alignment.
  */
+
+#ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable:4201)  /* Win driver complains about unnamed union */
+#endif
+
 typedef struct VMCINotifyBitmapSetMsg {
    VMCIDatagram hdr;
-   PPN          bitmapPPN;
-   uint32       _pad;
+   union {
+      PPN32   bitmapPPN32;
+      PPN     bitmapPPN64;
+   };
 } VMCINotifyBitmapSetMsg;
 
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
-/* 
+
+/*
  * Struct used for linking a doorbell handle with an index in the
  * notify bitmap. All fields in struct are aligned to their natural
  * alignment.

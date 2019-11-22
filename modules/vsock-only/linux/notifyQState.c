@@ -23,7 +23,6 @@
  *      Stream Sockets protocol.
  */
 
-
 #include "driver-config.h"
 
 #include <linux/socket.h>
@@ -35,7 +34,6 @@
 
 #define PKT_FIELD(vsk, fieldName) \
    (vsk)->notify.pktQState.fieldName
-
 
 /*
  *----------------------------------------------------------------------------
@@ -53,65 +51,63 @@
  *----------------------------------------------------------------------------
  */
 
-static Bool
-VSockVmciNotifyWaitingWrite(VSockVmciSock *vsk)    // IN
+static Bool VSockVmciNotifyWaitingWrite(VSockVmciSock * vsk)	// IN
 {
-   Bool retval;
-   uint64 notifyLimit;
+	Bool retval;
+	uint64 notifyLimit;
 
-   if (!PKT_FIELD(vsk, peerWaitingWrite)) {
-      return FALSE;
-   }
+	if (!PKT_FIELD(vsk, peerWaitingWrite)) {
+		return FALSE;
+	}
 
-   /*
-    * When the sender blocks, we take that as a sign that the sender
-    * is faster than the receiver. To reduce the transmit rate of the
-    * sender, we delay the sending of the read notification by
-    * decreasing the writeNotifyWindow. The notification is delayed
-    * until the number of bytes used in the queue drops below the
-    * writeNotifyWindow.
-    */
+	/*
+	 * When the sender blocks, we take that as a sign that the sender
+	 * is faster than the receiver. To reduce the transmit rate of the
+	 * sender, we delay the sending of the read notification by
+	 * decreasing the writeNotifyWindow. The notification is delayed
+	 * until the number of bytes used in the queue drops below the
+	 * writeNotifyWindow.
+	 */
 
-   if (!PKT_FIELD(vsk, peerWaitingWriteDetected)) {
-      PKT_FIELD(vsk, peerWaitingWriteDetected) = TRUE;
-      if (PKT_FIELD(vsk, writeNotifyWindow) < PAGE_SIZE) {
-         PKT_FIELD(vsk, writeNotifyWindow) =
-            PKT_FIELD(vsk, writeNotifyMinWindow);
-      } else {
-         PKT_FIELD(vsk, writeNotifyWindow) -= PAGE_SIZE;
-         if (PKT_FIELD(vsk, writeNotifyWindow) <
-             PKT_FIELD(vsk, writeNotifyMinWindow)) {
-            PKT_FIELD(vsk, writeNotifyWindow) =
-               PKT_FIELD(vsk, writeNotifyMinWindow);
-         }
-      }
-   }
-   notifyLimit = vsk->consumeSize - PKT_FIELD(vsk, writeNotifyWindow);
+	if (!PKT_FIELD(vsk, peerWaitingWriteDetected)) {
+		PKT_FIELD(vsk, peerWaitingWriteDetected) = TRUE;
+		if (PKT_FIELD(vsk, writeNotifyWindow) < PAGE_SIZE) {
+			PKT_FIELD(vsk, writeNotifyWindow) =
+			    PKT_FIELD(vsk, writeNotifyMinWindow);
+		} else {
+			PKT_FIELD(vsk, writeNotifyWindow) -= PAGE_SIZE;
+			if (PKT_FIELD(vsk, writeNotifyWindow) <
+			    PKT_FIELD(vsk, writeNotifyMinWindow)) {
+				PKT_FIELD(vsk, writeNotifyWindow) =
+				    PKT_FIELD(vsk, writeNotifyMinWindow);
+			}
+		}
+	}
+	notifyLimit = vsk->consumeSize - PKT_FIELD(vsk, writeNotifyWindow);
 
-   /*
-    * The notifyLimit is used to delay notifications in the case where
-    * flow control is enabled. Below the test is expressed in terms of
-    * free space in the queue:
-    *   if freeSpace > ConsumeSize - writeNotifyWindow then notify
-    * An alternate way of expressing this is to rewrite the expression
-    * to use the data ready in the receive queue:
-    *   if writeNotifyWindow > bufferReady then notify
-    * as freeSpace == ConsumeSize - bufferReady.
-    */
+	/*
+	 * The notifyLimit is used to delay notifications in the case where
+	 * flow control is enabled. Below the test is expressed in terms of
+	 * free space in the queue:
+	 *   if freeSpace > ConsumeSize - writeNotifyWindow then notify
+	 * An alternate way of expressing this is to rewrite the expression
+	 * to use the data ready in the receive queue:
+	 *   if writeNotifyWindow > bufferReady then notify
+	 * as freeSpace == ConsumeSize - bufferReady.
+	 */
 
-   retval = vmci_qpair_consume_free_space(vsk->qpair) > notifyLimit;
+	retval = vmci_qpair_consume_free_space(vsk->qpair) > notifyLimit;
 
-   if (retval) {
-      /*
-       * Once we notify the peer, we reset the detected flag so the
-       * next wait will again cause a decrease in the window size.
-       */
+	if (retval) {
+		/*
+		 * Once we notify the peer, we reset the detected flag so the
+		 * next wait will again cause a decrease in the window size.
+		 */
 
-      PKT_FIELD(vsk, peerWaitingWriteDetected) = FALSE;
-   }
-   return retval;
+		PKT_FIELD(vsk, peerWaitingWriteDetected) = FALSE;
+	}
+	return retval;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -129,17 +125,15 @@ VSockVmciNotifyWaitingWrite(VSockVmciSock *vsk)    // IN
  *----------------------------------------------------------------------------
  */
 
-static void
-VSockVmciHandleRead(struct sock *sk,            // IN
-                    VSockPacket *pkt,           // IN: unused
-                    Bool bottomHalf,            // IN: unused
-                    struct sockaddr_vm *dst,    // IN: unused
-                    struct sockaddr_vm *src)    // IN: unused
+static void VSockVmciHandleRead(struct sock *sk,	// IN
+				VSockPacket * pkt,	// IN: unused
+				Bool bottomHalf,	// IN: unused
+				struct sockaddr_vm *dst,	// IN: unused
+				struct sockaddr_vm *src)	// IN: unused
 {
 
-   sk->sk_write_space(sk);
+	sk->sk_write_space(sk);
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -157,16 +151,14 @@ VSockVmciHandleRead(struct sock *sk,            // IN
  *----------------------------------------------------------------------------
  */
 
-static void
-VSockVmciHandleWrote(struct sock *sk,            // IN
-                     VSockPacket *pkt,           // IN: unused
-                     Bool bottomHalf,            // IN: unused
-                     struct sockaddr_vm *dst,    // IN: unused
-                     struct sockaddr_vm *src)    // IN: unused
+static void VSockVmciHandleWrote(struct sock *sk,	// IN
+				 VSockPacket * pkt,	// IN: unused
+				 Bool bottomHalf,	// IN: unused
+				 struct sockaddr_vm *dst,	// IN: unused
+				 struct sockaddr_vm *src)	// IN: unused
 {
-   sk->sk_data_ready(sk);
+	sk->sk_data_ready(sk);
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -184,20 +176,18 @@ VSockVmciHandleWrote(struct sock *sk,            // IN
  *----------------------------------------------------------------------------
  */
 
-static void
-VSockVmciBlockUpdateWriteWindow(struct sock *sk) // IN
+static void VSockVmciBlockUpdateWriteWindow(struct sock *sk)	// IN
 {
-   VSockVmciSock *vsk;
+	VSockVmciSock *vsk;
 
-   vsk = vsock_sk(sk);
+	vsk = vsock_sk(sk);
 
-   if (PKT_FIELD(vsk, writeNotifyWindow) < vsk->consumeSize) {
-      PKT_FIELD(vsk, writeNotifyWindow) =
-         MIN(PKT_FIELD(vsk, writeNotifyWindow) + PAGE_SIZE,
-             vsk->consumeSize);
-   }
+	if (PKT_FIELD(vsk, writeNotifyWindow) < vsk->consumeSize) {
+		PKT_FIELD(vsk, writeNotifyWindow) =
+		    MIN(PKT_FIELD(vsk, writeNotifyWindow) + PAGE_SIZE,
+			vsk->consumeSize);
+	}
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -216,49 +206,48 @@ VSockVmciBlockUpdateWriteWindow(struct sock *sk) // IN
  *----------------------------------------------------------------------------
  */
 
-static int
-VSockVmciSendReadNotification(struct sock *sk)  // IN
+static int VSockVmciSendReadNotification(struct sock *sk)	// IN
 {
-   VSockVmciSock *vsk;
-   Bool sentRead;
-   unsigned int retries;
-   int err;
+	VSockVmciSock *vsk;
+	Bool sentRead;
+	unsigned int retries;
+	int err;
 
-   ASSERT(sk);
+	ASSERT(sk);
 
-   vsk = vsock_sk(sk);
-   sentRead = FALSE;
-   retries = 0u;
-   err = 0;
+	vsk = vsock_sk(sk);
+	sentRead = FALSE;
+	retries = 0;
+	err = 0;
 
-   if (VSockVmciNotifyWaitingWrite(vsk)) {
-      /*
-       * Notify the peer that we have read, retrying the send on failure up to our
-       * maximum value.  XXX For now we just log the failure, but later we should
-       * schedule a work item to handle the resend until it succeeds.  That would
-       * require keeping track of work items in the vsk and cleaning them up upon
-       * socket close.
-       */
-      while (!(vsk->peerShutdown & RCV_SHUTDOWN) &&
-             !sentRead &&
-             retries < VSOCK_MAX_DGRAM_RESENDS) {
-         err = VSOCK_SEND_READ(sk);
-         if (err >= 0) {
-            sentRead = TRUE;
-         }
+	if (VSockVmciNotifyWaitingWrite(vsk)) {
+		/*
+		 * Notify the peer that we have read, retrying the send on failure up to our
+		 * maximum value.  XXX For now we just log the failure, but later we should
+		 * schedule a work item to handle the resend until it succeeds.  That would
+		 * require keeping track of work items in the vsk and cleaning them up upon
+		 * socket close.
+		 */
+		while (!(vsk->peerShutdown & RCV_SHUTDOWN) &&
+		       !sentRead && retries < VSOCK_MAX_DGRAM_RESENDS) {
+			err = VSOCK_SEND_READ(sk);
+			if (err >= 0) {
+				sentRead = TRUE;
+			}
 
-         retries++;
-      }
+			retries++;
+		}
 
-      if (retries >= VSOCK_MAX_DGRAM_RESENDS && !sentRead) {
-         Warning("unable to send read notification to peer for socket %p.\n", sk);
-      } else {
-         PKT_FIELD(vsk, peerWaitingWrite) = FALSE;
-      }
-   }
-   return err;
+		if (retries >= VSOCK_MAX_DGRAM_RESENDS && !sentRead) {
+			Warning
+			    ("unable to send read notification to peer for socket %p.\n",
+			     sk);
+		} else {
+			PKT_FIELD(vsk, peerWaitingWrite) = FALSE;
+		}
+	}
+	return err;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -277,18 +266,16 @@ VSockVmciSendReadNotification(struct sock *sk)  // IN
  *----------------------------------------------------------------------------
  */
 
-static void
-VSockVmciNotifyPktSocketInit(struct sock *sk) // IN
+static void VSockVmciNotifyPktSocketInit(struct sock *sk)	// IN
 {
-   VSockVmciSock *vsk;
-   vsk = vsock_sk(sk);
+	VSockVmciSock *vsk;
+	vsk = vsock_sk(sk);
 
-   PKT_FIELD(vsk, writeNotifyWindow)        = PAGE_SIZE;
-   PKT_FIELD(vsk, writeNotifyMinWindow)     = PAGE_SIZE;
-   PKT_FIELD(vsk, peerWaitingWrite)         = FALSE;
-   PKT_FIELD(vsk, peerWaitingWriteDetected) = FALSE;
+	PKT_FIELD(vsk, writeNotifyWindow) = PAGE_SIZE;
+	PKT_FIELD(vsk, writeNotifyMinWindow) = PAGE_SIZE;
+	PKT_FIELD(vsk, peerWaitingWrite) = FALSE;
+	PKT_FIELD(vsk, peerWaitingWriteDetected) = FALSE;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -306,18 +293,16 @@ VSockVmciNotifyPktSocketInit(struct sock *sk) // IN
  *----------------------------------------------------------------------------
  */
 
-static void
-VSockVmciNotifyPktSocketDestruct(struct sock *sk) // IN
+static void VSockVmciNotifyPktSocketDestruct(struct sock *sk)	// IN
 {
-   VSockVmciSock *vsk;
-   vsk = vsock_sk(sk);
+	VSockVmciSock *vsk;
+	vsk = vsock_sk(sk);
 
-   PKT_FIELD(vsk, writeNotifyWindow) = PAGE_SIZE;
-   PKT_FIELD(vsk, writeNotifyMinWindow) = PAGE_SIZE;
-   PKT_FIELD(vsk, peerWaitingWrite) = FALSE;
-   PKT_FIELD(vsk, peerWaitingWriteDetected) = FALSE;
+	PKT_FIELD(vsk, writeNotifyWindow) = PAGE_SIZE;
+	PKT_FIELD(vsk, writeNotifyMinWindow) = PAGE_SIZE;
+	PKT_FIELD(vsk, peerWaitingWrite) = FALSE;
+	PKT_FIELD(vsk, peerWaitingWriteDetected) = FALSE;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -337,34 +322,32 @@ VSockVmciNotifyPktSocketDestruct(struct sock *sk) // IN
  *----------------------------------------------------------------------------
  */
 
-static int32
-VSockVmciNotifyPktPollIn(struct sock *sk,    // IN
-                         size_t target,      // IN
-                         Bool *dataReadyNow) // IN
+static int32 VSockVmciNotifyPktPollIn(struct sock *sk,	// IN
+				      size_t target,	// IN
+				      Bool * dataReadyNow)	// IN
 {
-   VSockVmciSock *vsk;
+	VSockVmciSock *vsk;
 
-   ASSERT(sk);
-   ASSERT(dataReadyNow);
+	ASSERT(sk);
+	ASSERT(dataReadyNow);
 
-   vsk = vsock_sk(sk);
+	vsk = vsock_sk(sk);
 
-   if (VSockVmciStreamHasData(vsk)) {
-      *dataReadyNow = TRUE;
-   } else {
-      /*
-       * We can't read right now because there is nothing in the queue.
-       * Ask for notifications when there is something to read.
-       */
-      if (sk->sk_state == SS_CONNECTED) {
-         VSockVmciBlockUpdateWriteWindow(sk);
-      }
-      *dataReadyNow = FALSE;
-   }
+	if (VSockVmciStreamHasData(vsk)) {
+		*dataReadyNow = TRUE;
+	} else {
+		/*
+		 * We can't read right now because there is nothing in the queue.
+		 * Ask for notifications when there is something to read.
+		 */
+		if (sk->sk_state == SS_CONNECTED) {
+			VSockVmciBlockUpdateWriteWindow(sk);
+		}
+		*dataReadyNow = FALSE;
+	}
 
-   return 0;
+	return 0;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -384,35 +367,32 @@ VSockVmciNotifyPktPollIn(struct sock *sk,    // IN
  *----------------------------------------------------------------------------
  */
 
-static int32
-VSockVmciNotifyPktPollOut(struct sock *sk,     // IN
-                          size_t target,       // IN
-                          Bool *spaceAvailNow) // IN
+static int32 VSockVmciNotifyPktPollOut(struct sock *sk,	// IN
+				       size_t target,	// IN
+				       Bool * spaceAvailNow)	// IN
 {
-   int64 produceQFreeSpace;
-   VSockVmciSock *vsk;
+	int64 produceQFreeSpace;
+	VSockVmciSock *vsk;
 
-   ASSERT(sk);
-   ASSERT(spaceAvailNow);
+	ASSERT(sk);
+	ASSERT(spaceAvailNow);
 
-   vsk = vsock_sk(sk);
+	vsk = vsock_sk(sk);
 
-   produceQFreeSpace =
-      VSockVmciStreamHasSpace(vsk);
-   if (produceQFreeSpace > 0) {
-      *spaceAvailNow = TRUE;
-      return 0;
-   } else if (produceQFreeSpace == 0) {
-      /*
-       * This is a connected socket but we can't currently send data. Nothing
-       * else to do.
-       */
-      *spaceAvailNow = FALSE;
-   }
+	produceQFreeSpace = VSockVmciStreamHasSpace(vsk);
+	if (produceQFreeSpace > 0) {
+		*spaceAvailNow = TRUE;
+		return 0;
+	} else if (produceQFreeSpace == 0) {
+		/*
+		 * This is a connected socket but we can't currently send data. Nothing
+		 * else to do.
+		 */
+		*spaceAvailNow = FALSE;
+	}
 
-   return 0;
+	return 0;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -430,44 +410,42 @@ VSockVmciNotifyPktPollOut(struct sock *sk,     // IN
  *----------------------------------------------------------------------------
  */
 
-static int32
-VSockVmciNotifyPktRecvInit(struct sock *sk,               // IN
-                           size_t target,                 // IN
-                           VSockVmciRecvNotifyData *data) // IN
+static int32 VSockVmciNotifyPktRecvInit(struct sock *sk,	// IN
+					size_t target,	// IN
+					VSockVmciRecvNotifyData * data)	// IN
 {
-   VSockVmciSock *vsk;
+	VSockVmciSock *vsk;
 
-   ASSERT(sk);
-   ASSERT(data);
+	ASSERT(sk);
+	ASSERT(data);
 
-   vsk = vsock_sk(sk);
+	vsk = vsock_sk(sk);
 
-   data->consumeHead = 0;
-   data->produceTail = 0;
-   data->notifyOnBlock = FALSE;
+	data->consumeHead = 0;
+	data->produceTail = 0;
+	data->notifyOnBlock = FALSE;
 
-   if (PKT_FIELD(vsk, writeNotifyMinWindow) < target + 1) {
-      ASSERT(target < vsk->consumeSize);
-      PKT_FIELD(vsk, writeNotifyMinWindow) = target + 1;
-      if (PKT_FIELD(vsk, writeNotifyWindow) <
-          PKT_FIELD(vsk, writeNotifyMinWindow)) {
-         /*
-          * If the current window is smaller than the new minimal
-          * window size, we need to reevaluate whether we need to
-          * notify the sender. If the number of ready bytes are
-          * smaller than the new window, we need to send a
-          * notification to the sender before we block.
-          */
+	if (PKT_FIELD(vsk, writeNotifyMinWindow) < target + 1) {
+		ASSERT(target < vsk->consumeSize);
+		PKT_FIELD(vsk, writeNotifyMinWindow) = target + 1;
+		if (PKT_FIELD(vsk, writeNotifyWindow) <
+		    PKT_FIELD(vsk, writeNotifyMinWindow)) {
+			/*
+			 * If the current window is smaller than the new minimal
+			 * window size, we need to reevaluate whether we need to
+			 * notify the sender. If the number of ready bytes are
+			 * smaller than the new window, we need to send a
+			 * notification to the sender before we block.
+			 */
 
-         PKT_FIELD(vsk, writeNotifyWindow) =
-            PKT_FIELD(vsk, writeNotifyMinWindow);
-         data->notifyOnBlock = TRUE;
-      }
-   }
+			PKT_FIELD(vsk, writeNotifyWindow) =
+			    PKT_FIELD(vsk, writeNotifyMinWindow);
+			data->notifyOnBlock = TRUE;
+		}
+	}
 
-   return 0;
+	return 0;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -490,31 +468,29 @@ VSockVmciNotifyPktRecvInit(struct sock *sk,               // IN
  *----------------------------------------------------------------------------
  */
 
-static int32
-VSockVmciNotifyPktRecvPreBlock(struct sock *sk,               // IN
-                               size_t target,                 // IN
-                               VSockVmciRecvNotifyData *data) // IN
+static int32 VSockVmciNotifyPktRecvPreBlock(struct sock *sk,	// IN
+					    size_t target,	// IN
+					    VSockVmciRecvNotifyData * data)	// IN
 {
-   int err;
+	int err;
 
-   ASSERT(sk);
-   ASSERT(data);
+	ASSERT(sk);
+	ASSERT(data);
 
-   err = 0;
+	err = 0;
 
-   VSockVmciBlockUpdateWriteWindow(sk);
+	VSockVmciBlockUpdateWriteWindow(sk);
 
-   if (data->notifyOnBlock) {
-      err = VSockVmciSendReadNotification(sk);
-      if (err < 0) {
-         return err;
-      }
-      data->notifyOnBlock = FALSE;
-   }
+	if (data->notifyOnBlock) {
+		err = VSockVmciSendReadNotification(sk);
+		if (err < 0) {
+			return err;
+		}
+		data->notifyOnBlock = FALSE;
+	}
 
-   return err;
+	return err;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -532,46 +508,44 @@ VSockVmciNotifyPktRecvPreBlock(struct sock *sk,               // IN
  *----------------------------------------------------------------------------
  */
 
-static int32
-VSockVmciNotifyPktRecvPostDequeue(struct sock *sk,               // IN
-                                  size_t target,                 // IN
-                                  ssize_t copied,                // IN
-                                  Bool dataRead,                 // IN
-                                  VSockVmciRecvNotifyData *data) // IN
+static int32 VSockVmciNotifyPktRecvPostDequeue(struct sock *sk,	// IN
+					       size_t target,	// IN
+					       ssize_t copied,	// IN
+					       Bool dataRead,	// IN
+					       VSockVmciRecvNotifyData * data)	// IN
 {
-   VSockVmciSock *vsk;
-   int err;
-   Bool wasFull = FALSE;
-   uint64 freeSpace;
+	VSockVmciSock *vsk;
+	int err;
+	Bool wasFull = FALSE;
+	uint64 freeSpace;
 
-   ASSERT(sk);
-   ASSERT(data);
+	ASSERT(sk);
+	ASSERT(data);
 
-   vsk = vsock_sk(sk);
-   err = 0;
+	vsk = vsock_sk(sk);
+	err = 0;
 
-   if (dataRead) {
-      SMP_RW_BARRIER_RW();
+	if (dataRead) {
+		SMP_RW_BARRIER_RW();
 
-      freeSpace = vmci_qpair_consume_free_space(vsk->qpair);
-      wasFull = freeSpace == copied;
+		freeSpace = vmci_qpair_consume_free_space(vsk->qpair);
+		wasFull = freeSpace == copied;
 
-      if (wasFull) {
-         PKT_FIELD(vsk, peerWaitingWrite) = TRUE;
-      }
+		if (wasFull) {
+			PKT_FIELD(vsk, peerWaitingWrite) = TRUE;
+		}
 
-      err = VSockVmciSendReadNotification(sk);
-      if (err < 0) {
-         return err;
-      }
+		err = VSockVmciSendReadNotification(sk);
+		if (err < 0) {
+			return err;
+		}
 
-      /* See the comment in VSockVmciNotifyPktSendPostEnqueue */
-      sk->sk_data_ready(sk);
-   }
+		/* See the comment in VSockVmciNotifyPktSendPostEnqueue */
+		sk->sk_data_ready(sk);
+	}
 
-   return err;
+	return err;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -588,19 +562,17 @@ VSockVmciNotifyPktRecvPostDequeue(struct sock *sk,               // IN
  *----------------------------------------------------------------------------
  */
 
-static int32
-VSockVmciNotifyPktSendInit(struct sock *sk,               // IN
-                           VSockVmciSendNotifyData *data) // IN
+static int32 VSockVmciNotifyPktSendInit(struct sock *sk,	// IN
+					VSockVmciSendNotifyData * data)	// IN
 {
-   ASSERT(sk);
-   ASSERT(data);
+	ASSERT(sk);
+	ASSERT(data);
 
-   data->consumeHead = 0;
-   data->produceTail = 0;
+	data->consumeHead = 0;
+	data->produceTail = 0;
 
-   return 0;
+	return 0;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -618,47 +590,46 @@ VSockVmciNotifyPktSendInit(struct sock *sk,               // IN
  *----------------------------------------------------------------------------
  */
 
-static int32
-VSockVmciNotifyPktSendPostEnqueue(struct sock *sk,               // IN
-                                  ssize_t written,               // IN
-                                  VSockVmciSendNotifyData *data) // IN
+static int32 VSockVmciNotifyPktSendPostEnqueue(struct sock *sk,	// IN
+					       ssize_t written,	// IN
+					       VSockVmciSendNotifyData * data)	// IN
 {
-   int err = 0;
-   VSockVmciSock *vsk;
-   Bool sentWrote = FALSE;
-   Bool wasEmpty;
+	int err = 0;
+	VSockVmciSock *vsk;
+	Bool sentWrote = FALSE;
+	Bool wasEmpty;
 
-   int retries = 0;
+	int retries = 0;
 
-   ASSERT(sk);
-   ASSERT(data);
+	ASSERT(sk);
+	ASSERT(data);
 
-   vsk = vsock_sk(sk);
+	vsk = vsock_sk(sk);
 
-   SMP_RW_BARRIER_RW();
+	SMP_RW_BARRIER_RW();
 
-   wasEmpty = (vmci_qpair_produce_buf_ready(vsk->qpair) == written);
-   if (wasEmpty) {
-      while (!(vsk->peerShutdown & RCV_SHUTDOWN) &&
-             !sentWrote &&
-             retries < VSOCK_MAX_DGRAM_RESENDS) {
-         err = VSOCK_SEND_WROTE(sk);
-         if (err >= 0) {
-            sentWrote = TRUE;
-         }
+	wasEmpty = (vmci_qpair_produce_buf_ready(vsk->qpair) == written);
+	if (wasEmpty) {
+		while (!(vsk->peerShutdown & RCV_SHUTDOWN) &&
+		       !sentWrote && retries < VSOCK_MAX_DGRAM_RESENDS) {
+			err = VSOCK_SEND_WROTE(sk);
+			if (err >= 0) {
+				sentWrote = TRUE;
+			}
 
-         retries++;
-      }
-   }
+			retries++;
+		}
+	}
 
-   if (retries >= VSOCK_MAX_DGRAM_RESENDS && !sentWrote) {
-      Warning("unable to send wrote notification to peer for socket %p.\n", sk);
-      return err;
-   }
+	if (retries >= VSOCK_MAX_DGRAM_RESENDS && !sentWrote) {
+		Warning
+		    ("unable to send wrote notification to peer for socket %p.\n",
+		     sk);
+		return err;
+	}
 
-   return err;
+	return err;
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -677,35 +648,33 @@ VSockVmciNotifyPktSendPostEnqueue(struct sock *sk,               // IN
  *----------------------------------------------------------------------------
  */
 
-static void
-VSockVmciNotifyPktHandlePkt(struct sock *sk,         // IN
-                            VSockPacket *pkt,        // IN
-                            Bool bottomHalf,         // IN
-                            struct sockaddr_vm *dst, // IN
-                            struct sockaddr_vm *src, // IN
-                            Bool *pktProcessed)      // In
+static void VSockVmciNotifyPktHandlePkt(struct sock *sk,	// IN
+					VSockPacket * pkt,	// IN
+					Bool bottomHalf,	// IN
+					struct sockaddr_vm *dst,	// IN
+					struct sockaddr_vm *src,	// IN
+					Bool * pktProcessed)	// In
 {
-   Bool processed = FALSE;
+	Bool processed = FALSE;
 
-   ASSERT(sk);
-   ASSERT(pkt);
+	ASSERT(sk);
+	ASSERT(pkt);
 
-   switch (pkt->type) {
-   case VSOCK_PACKET_TYPE_WROTE:
-      VSockVmciHandleWrote(sk, pkt, bottomHalf, dst, src);
-      processed = TRUE;
-      break;
-   case VSOCK_PACKET_TYPE_READ:
-      VSockVmciHandleRead(sk, pkt, bottomHalf, dst, src);
-      processed = TRUE;
-      break;
-   }
+	switch (pkt->type) {
+	case VSOCK_PACKET_TYPE_WROTE:
+		VSockVmciHandleWrote(sk, pkt, bottomHalf, dst, src);
+		processed = TRUE;
+		break;
+	case VSOCK_PACKET_TYPE_READ:
+		VSockVmciHandleRead(sk, pkt, bottomHalf, dst, src);
+		processed = TRUE;
+		break;
+	}
 
-   if (pktProcessed) {
-      *pktProcessed = processed;
-   }
+	if (pktProcessed) {
+		*pktProcessed = processed;
+	}
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -723,21 +692,19 @@ VSockVmciNotifyPktHandlePkt(struct sock *sk,         // IN
  *----------------------------------------------------------------------------
  */
 
-static void
-VSockVmciNotifyPktProcessRequest(struct sock *sk) // IN
+static void VSockVmciNotifyPktProcessRequest(struct sock *sk)	// IN
 {
-   VSockVmciSock *vsk;
+	VSockVmciSock *vsk;
 
-   ASSERT(sk);
+	ASSERT(sk);
 
-   vsk = vsock_sk(sk);
+	vsk = vsock_sk(sk);
 
-   PKT_FIELD(vsk, writeNotifyWindow) = vsk->consumeSize;
-   if (vsk->consumeSize < PKT_FIELD(vsk, writeNotifyMinWindow)) {
-      PKT_FIELD(vsk, writeNotifyMinWindow) = vsk->consumeSize;
-   }
+	PKT_FIELD(vsk, writeNotifyWindow) = vsk->consumeSize;
+	if (vsk->consumeSize < PKT_FIELD(vsk, writeNotifyMinWindow)) {
+		PKT_FIELD(vsk, writeNotifyMinWindow) = vsk->consumeSize;
+	}
 }
-
 
 /*
  *----------------------------------------------------------------------------
@@ -755,22 +722,19 @@ VSockVmciNotifyPktProcessRequest(struct sock *sk) // IN
  *----------------------------------------------------------------------------
  */
 
-static void VSockVmciNotifyPktProcessNegotiate(struct sock *sk) // IN
+static void VSockVmciNotifyPktProcessNegotiate(struct sock *sk)	// IN
 {
-   VSockVmciSock *vsk;
+	VSockVmciSock *vsk;
 
-   ASSERT(sk);
+	ASSERT(sk);
 
-   vsk = vsock_sk(sk);
+	vsk = vsock_sk(sk);
 
-   PKT_FIELD(vsk, writeNotifyWindow) = vsk->consumeSize;
-   if (vsk->consumeSize < PKT_FIELD(vsk, writeNotifyMinWindow)) {
-      PKT_FIELD(vsk, writeNotifyMinWindow) = vsk->consumeSize;
-   }
+	PKT_FIELD(vsk, writeNotifyWindow) = vsk->consumeSize;
+	if (vsk->consumeSize < PKT_FIELD(vsk, writeNotifyMinWindow)) {
+		PKT_FIELD(vsk, writeNotifyMinWindow) = vsk->consumeSize;
+	}
 }
-
-
-
 
 // Socket always on control packet based operations.
 VSockVmciNotifyOps vSockVmciNotifyPktQStateOps __refdata = {
@@ -789,5 +753,5 @@ VSockVmciNotifyOps vSockVmciNotifyPktQStateOps __refdata = {
     .sendPostEnqueue  = VSockVmciNotifyPktSendPostEnqueue,
     .processRequest   = VSockVmciNotifyPktProcessRequest,
     .processNegotiate = VSockVmciNotifyPktProcessNegotiate,
-
 };
+

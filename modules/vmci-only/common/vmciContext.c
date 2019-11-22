@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2006-2012,2014-2016 VMware, Inc. All rights reserved.
+ * Copyright (C) 2006-2012,2014-2019 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -40,6 +40,8 @@
 #  include "vmciVmkInt.h"
 #  include "vm_libc.h"
 #  include "helper_ext.h"
+#  include "migrate_defs.h"
+#  include "world.h"
 #endif
 
 #define LGPFX "VMCIContext: "
@@ -53,6 +55,17 @@ static void VMCIContextReleaseGuestMemLocked(VMCIContext *context,
                                              VMCIGuestMemID gid,
                                              Bool powerOff);
 static void VMCIContextInFilterCleanup(VMCIContext *context);
+#endif
+
+/*
+ * For vmkernel, the number of contexts is bounded by the number of
+ * supported worlds plus the three special contexts (host,
+ * hypervisor, wellknown). For hosted, we use a wide upper bound.
+ */
+#if defined(VMKERNEL)
+#  define VMCI_MAX_CONTEXTS (World_SupportedVMs() + 3)
+#else
+#  define VMCI_MAX_CONTEXTS 2000
 #endif
 
 /*
@@ -296,25 +309,28 @@ VMCIContext_InitContext(VMCIId cid,                   // IN
 
    context->userVersion = userVersion;
 
-   context->queuePairArray = VMCIHandleArray_Create(0);
+   /* The minimum size of a queue pair is 2 pages. */
+   context->queuePairArray = VMCIHandleArray_Create(0, VMCI_MAX_GUEST_QP_COUNT);
    if (!context->queuePairArray) {
       result = VMCI_ERROR_NO_MEM;
       goto error;
    }
 
-   context->doorbellArray = VMCIHandleArray_Create(0);
+   context->doorbellArray =
+      VMCIHandleArray_Create(0, VMCI_MAX_GUEST_DOORBELL_COUNT);
    if (!context->doorbellArray) {
       result = VMCI_ERROR_NO_MEM;
       goto error;
    }
 
-   context->pendingDoorbellArray = VMCIHandleArray_Create(0);
+   context->pendingDoorbellArray =
+      VMCIHandleArray_Create(0, VMCI_MAX_GUEST_DOORBELL_COUNT);
    if (!context->pendingDoorbellArray) {
       result = VMCI_ERROR_NO_MEM;
       goto error;
    }
 
-   context->notifierArray = VMCIHandleArray_Create(0);
+   context->notifierArray = VMCIHandleArray_Create(0, VMCI_MAX_CONTEXTS);
    if (context->notifierArray == NULL) {
       result = VMCI_ERROR_NO_MEM;
       goto error;
@@ -375,7 +391,8 @@ VMCIContext_InitContext(VMCIId cid,                   // IN
    VMCI_ReleaseLock(&contextList.lock, flags);
 
 #ifdef VMKERNEL
-   VMCIContext_SetFSRState(context, FALSE, VMCI_INVALID_ID, eventHnd, FALSE);
+   VMCIContext_SetQuiesceState(context, FALSE, VMCI_INVALID_ID, eventHnd, 0,
+                               FALSE);
 #endif
 
 #ifndef VMX86_SERVER
@@ -927,10 +944,10 @@ VMCIContext_DequeueDatagram(VMCIContext *context, // IN
 /*
  *----------------------------------------------------------------------
  *
- * VMCIContext_SetFSRState --
+ * VMCIContext_SetQuiesceState --
  *
  *      Set the states related to FSR (quiesced state, migrateCid,
- *      active event handle).
+ *      quiesce cause, active event handle).
  *
  * Results:
  *      None.
@@ -942,11 +959,12 @@ VMCIContext_DequeueDatagram(VMCIContext *context, // IN
  */
 
 void
-VMCIContext_SetFSRState(VMCIContext *context, // IN
-                        Bool isQuiesced,      // IN
-                        VMCIId migrateCid,    // IN
-                        uintptr_t eventHnd,   // IN
-                        Bool isLocked)        // IN
+VMCIContext_SetQuiesceState(VMCIContext *context, // IN
+                            Bool isQuiesced,      // IN
+                            VMCIId migrateCid,    // IN
+                            uintptr_t eventHnd,   // IN
+                            uint8 cause,          // IN
+                            Bool isLocked)        // IN
 {
    VMCILockFlags flags;
    if (!context) {
@@ -958,6 +976,8 @@ VMCIContext_SetFSRState(VMCIContext *context, // IN
    context->isQuiesced = isQuiesced;
    context->migrateCid = migrateCid;
    VMCIHost_SetActiveHnd(&context->hostContext, eventHnd);
+   context->quiesceCause = cause == MIGRATE_TYPE_VMOTION ? VMCI_DETACH_VMOTION :
+                                                           VMCI_DETACH_REGULAR;
    if (!isLocked) {
       VMCI_ReleaseLock(&context->lock, flags);
    }
@@ -999,8 +1019,8 @@ VMCIContext_FindAndUpdateSrcFSR(VMCIId migrateCid,      // IN
             *srcEventHnd = VMCIHost_GetActiveHnd(&contextSrc->hostContext);
             ASSERT(*srcEventHnd != VMCI_INVALID_ID);
          }
-         VMCIContext_SetFSRState(contextSrc, FALSE, VMCI_INVALID_ID,
-                                 eventHnd, TRUE);
+         VMCIContext_SetQuiesceState(contextSrc, FALSE, VMCI_INVALID_ID,
+                                     eventHnd, 0, TRUE);
          VMCI_ReleaseLock(&contextSrc->lock, flags);
          return contextSrc;
       }
@@ -1442,8 +1462,8 @@ VMCIContext_AddNotification(VMCIId contextID,  // IN:
    VMCI_GrabLock(&contextList.firingLock, &firingFlags);
    VMCI_GrabLock(&context->lock, &flags);
    if (!VMCIHandleArray_HasEntry(context->notifierArray, notifierHandle)) {
-      VMCIHandleArray_AppendEntry(&context->notifierArray, notifierHandle);
-      result = VMCI_SUCCESS;
+      result = VMCIHandleArray_AppendEntry(&context->notifierArray,
+                                           notifierHandle);
    }
    VMCI_ReleaseLock(&context->lock, flags);
    VMCI_ReleaseLock(&contextList.firingLock, firingFlags);
@@ -1529,7 +1549,7 @@ VMCIContextFireNotification(VMCIId contextID,             // IN
     * We create an array to hold the subscribers we find when scanning through
     * all contexts.
     */
-   subscriberArray = VMCIHandleArray_Create(0);
+   subscriberArray = VMCIHandleArray_Create(0, VMCI_MAX_CONTEXTS);
    if (subscriberArray == NULL) {
       return VMCI_ERROR_NO_MEM;
    }
@@ -1953,7 +1973,8 @@ VMCIContext_ReceiveNotificationsGet(VMCIId contextID,                // IN
    VMCI_GrabLock(&context->lock, &flags);
 
    *dbHandleArray = context->pendingDoorbellArray;
-   context->pendingDoorbellArray =  VMCIHandleArray_Create(0);
+   context->pendingDoorbellArray =
+      VMCIHandleArray_Create(0, VMCI_MAX_GUEST_DOORBELL_COUNT);
    if (!context->pendingDoorbellArray) {
       context->pendingDoorbellArray = *dbHandleArray;
       *dbHandleArray = NULL;
@@ -2080,8 +2101,7 @@ VMCIContext_DoorbellCreate(VMCIId contextID,   // IN
 
    VMCI_GrabLock(&context->lock, &flags);
    if (!VMCIHandleArray_HasEntry(context->doorbellArray, handle)) {
-      VMCIHandleArray_AppendEntry(&context->doorbellArray, handle);
-      result = VMCI_SUCCESS;
+      result = VMCIHandleArray_AppendEntry(&context->doorbellArray, handle);
    } else {
       result = VMCI_ERROR_DUPLICATE_ENTRY;
    }
@@ -2279,16 +2299,20 @@ VMCIContext_NotifyDoorbell(VMCIId srcCID,                   // IN
          result = VMCI_ERROR_NOT_FOUND;
       } else {
          if (!VMCIHandleArray_HasEntry(dstContext->pendingDoorbellArray, handle)) {
-            VMCIHandleArray_AppendEntry(&dstContext->pendingDoorbellArray, handle);
-
-            VMCIContextSignalNotify(dstContext);
+            result =
+               VMCIHandleArray_AppendEntry(&dstContext->pendingDoorbellArray,
+                                           handle);
+            if (result == VMCI_SUCCESS) {
+               VMCIContextSignalNotify(dstContext);
 #if defined(VMKERNEL)
-            VMCIHost_SignalBitmap(&dstContext->hostContext);
+               VMCIHost_SignalBitmap(&dstContext->hostContext);
 #else
-            VMCIHost_SignalCall(&dstContext->hostContext);
+               VMCIHost_SignalCall(&dstContext->hostContext);
 #endif
+            }
+         } else {
+            result = VMCI_SUCCESS;
          }
-         result = VMCI_SUCCESS;
       }
       VMCI_ReleaseLock(&dstContext->lock, flags);
    }
@@ -2587,8 +2611,7 @@ VMCIContext_QueuePairCreate(VMCIContext *context, // IN: Context structure
    }
 
    if (!VMCIHandleArray_HasEntry(context->queuePairArray, handle)) {
-      VMCIHandleArray_AppendEntry(&context->queuePairArray, handle);
-      result = VMCI_SUCCESS;
+      result = VMCIHandleArray_AppendEntry(&context->queuePairArray, handle);
    } else {
       result = VMCI_ERROR_DUPLICATE_ENTRY;
    }
@@ -3038,5 +3061,37 @@ VMCI_Uuid2ContextId(const char *uuidString, // IN
    VMCI_ReleaseLock(&contextList.lock, flags);
 
    return err;
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * VMCIContext_SetPtr --
+ *
+ *      Update the value of the pointer while holding the lock of
+ *      the given context.
+ *
+ * Results:
+ *      None.
+ *
+ * Side effects:
+ *      None.
+ *
+ *----------------------------------------------------------------------
+ */
+
+void
+VMCIContext_SetPtr(VMCIContext *context, void **ptr, void *value)
+{
+   VMCILockFlags flags;
+
+   if (ptr == NULL) {
+      return;
+   }
+
+   VMCI_GrabLock(&context->lock, &flags);
+   *ptr = value;
+   VMCI_ReleaseLock(&context->lock, flags);
 }
 #endif // VMKERNEL

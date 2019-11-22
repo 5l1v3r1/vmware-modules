@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 ##########################################################
-# Copyright (C) 1998-2016 VMware, Inc. All rights reserved.
+# Copyright (C) 1998-2019 VMware, Inc. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -98,6 +98,13 @@ auto-build: $(DRIVER_KO)
 $(DRIVER): $(DRIVER_KO)
 	if [ $< -nt $@ ] || [ ! -e $@ ] ; then cp -f $< $@; fi
 
+# Use SUBDIRS on 2.x, 3.x, 4.x.  Use M on newer kernels.
+ifeq ($(filter-out 2 3 4,$(firstword $(subst ., ,$(VM_UNAME)))),)
+DIRVAR := SUBDIRS
+else
+DIRVAR := M
+endif
+
 #
 # Define a setup target that gets built before the actual driver.
 # This target may not be used at all, but if it is then it will be defined
@@ -107,7 +114,7 @@ prebuild:: ;
 postbuild:: ;
 
 $(DRIVER_KO): prebuild
-	$(MAKE) -C $(BUILD_DIR) SUBDIRS=$$PWD SRCROOT=$$PWD/$(SRCROOT) \
+	$(MAKE) -C $(BUILD_DIR) $(DIRVAR)=$$PWD SRCROOT=$$PWD/$(SRCROOT) \
 	  MODULEBUILDDIR=$(MODULEBUILDDIR) modules
 	$(MAKE) -C $$PWD SRCROOT=$$PWD/$(SRCROOT) \
 	  MODULEBUILDDIR=$(MODULEBUILDDIR) postbuild

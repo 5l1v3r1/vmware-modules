@@ -1,5 +1,5 @@
 /*********************************************************
- * Copyright (C) 2006-2013,2015 VMware, Inc. All rights reserved.
+ * Copyright (C) 2006-2013,2015,2017-2018 VMware, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -48,11 +48,12 @@ int VMCIContext_InitContext(VMCIId cid, VMCIPrivilegeFlags flags,
                             uintptr_t eventHnd, int version,
                             VMCIHostUser *user, VMCIContext **context);
 #ifdef VMKERNEL
-void VMCIContext_SetFSRState(VMCIContext *context,
-                             Bool isQuiesced,
-                             VMCIId migrateCid,
-                             uintptr_t eventHnd,
-                             Bool isLocked);
+void VMCIContext_SetQuiesceState(VMCIContext *context,
+                                 Bool isQuiesced,
+                                 VMCIId migrateCid,
+                                 uintptr_t eventHnd,
+                                 uint8 cause,
+                                 Bool isLocked);
 VMCIContext *VMCIContext_FindAndUpdateSrcFSR(VMCIId migrateCid,
                                              uintptr_t eventHnd,
                                              uintptr_t *srcEventHnd);
@@ -68,6 +69,7 @@ void VMCIContext_SetId(VMCIContext *context, VMCIId cid);
 void VMCIContext_NotifyGuestPaused(VMCIId cid, Bool paused);
 void VMCIContext_NotifyMemoryAccess(VMCIId cid, Bool on);
 Bool VMCIContext_RevalidateMappings(VMCIContext *context);
+void VMCIContext_SetPtr(VMCIContext *context, void **ptr, void *value);
 #endif
 Bool VMCIContext_SupportsHostQP(VMCIContext *context);
 void VMCIContext_ReleaseContext(VMCIContext *context);

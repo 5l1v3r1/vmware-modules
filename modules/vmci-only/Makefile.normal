@@ -56,6 +56,8 @@ CC_KFLAGS := -D__KERNEL__ -fno-strength-reduce -fno-omit-frame-pointer \
 CC_KFLAGS += $(call vm_check_gcc,-falign-loops=2 -falign-jumps=2 -falign-functions=2, \
 	     -malign-loops=2 -malign-jumps=2 -malign-functions=2)
 CC_KFLAGS += $(call vm_check_gcc,-fno-strict-aliasing,)
+# Spectre options
+CC_KFLAGS += $(call vm_check_gcc,-mindirect-branch=thunk -mindirect-branch-register,)
 ifeq ($(MACHINE),x86_64)
 CC_KFLAGS += -mno-red-zone -mcmodel=kernel
 else
